@@ -104,10 +104,11 @@ type ScoreDimension = {
   summary: string;
   evidenceEventIds: string[];
   confidence: "high" | "medium" | "low" | "unscorable";
+  missingEvidence?: string[];
 };
 ```
 
-`RoleScore.dimensions` 在 MVP 阶段必须固定为 4 项。每个 `ScoreDimension.evidenceEventIds` 必须非空，且只能引用赛后时间轴中真实存在的事件。缺少证据事件时，`score` 必须为 `null` 或低置信度分数，`confidence` 必须说明不可评分或低置信度原因。
+`RoleScore.dimensions` 在 MVP 阶段必须固定为 4 项。可评分维度的 `evidenceEventIds` 必须非空，且只能引用赛后时间轴中真实存在的事件。当 `confidence` 是 `high`、`medium` 或 `low` 时，`evidenceEventIds` 必须非空。当 `confidence: "unscorable"` 时，`evidenceEventIds` 可以为空，但 `score` 必须为 `null`，并且必须提供 `missingEvidence` 说明缺少哪些时间轴事件或输入证据。
 
 ## MVP 后扩展策略
 
@@ -126,10 +127,10 @@ type ScoreDimension = {
 
 - 每个 MVP 角色都能获得评分。
 - 每个 MVP 角色都能生成固定 4 个评分维度。
-- 每个维度都有至少一个 `evidenceEventId`。
+- 每个可评分维度都有至少一个 `evidenceEventId`。
 - `evidenceEventIds` 引用的事件必须存在于赛后时间轴。
 - 同一份复盘的评分是确定性的。
-- 缺少证据事件时，该维度必须返回可解释的低置信度或不可评分状态，不能凭空打分。
+- 缺少证据事件时，该维度必须返回 `confidence: "unscorable"`、`score: null` 和 `missingEvidence`，不能凭空打分。
 - 每个角色至少有一个固定 replay 用例，证明评分维度和时间轴事件能对应起来。
 - 有帮助的投票会提高 `发言与投票影响` 或 `阵营贡献`。
 - 毒中狼人会提高女巫的 `阵营贡献`。
@@ -142,7 +143,7 @@ type ScoreDimension = {
 - 玩家完成对局后可以获得角色专属评分。
 - 评分不需要 API key。
 - MVP 阶段每个角色固定输出 4 个评分维度。
-- 每个评分维度都有明确时间轴事件支撑。
+- 每个可评分维度都有明确时间轴事件支撑。
 - 没有时间轴事件支撑的维度不能给出有效分数。
 - 脚本评分明确标注为确定性脚本评分。
 

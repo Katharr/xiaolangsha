@@ -6,7 +6,9 @@
 
 ## 范围
 
-本阶段实现玩家视角教练。无 API key 时提供本地规则教练；有 API key 时可以预留 LLM 教练接口，但不要让 LLM 成为必需依赖。
+本阶段实现玩家视角的本地规则教练。无 API key 时必须可用；LLM 教练只保留边界说明和未来接口方向，不在本阶段实现为必需工程能力。
+
+MVP 阶段不要求实现 LLM adapter、LLM payload 构造、LLM 调用失败回退或 LLM 输出测试。这些要求进入 `specs/09`、`specs/10`、`specs/12` 或未来明确的 LLM 教练阶段后再展开。
 
 ## 教练视角原则
 
@@ -39,9 +41,9 @@ buildCoachPlayerView(gameState: GameState, humanPlayerId: PlayerId): CoachPlayer
 getLocalCoachAdvice(context: CoachPlayerView, question?: string): CoachAdvice
 ```
 
-可选 LLM 适配器只能接收序列化后的 `CoachPlayerView`，不能接收完整 `GameState`、`internal` 事件、随机种子、调试快照或玩家视角外隐藏信息。
+未来可选 LLM 适配器只能接收序列化后的 `CoachPlayerView`，不能接收完整 `GameState`、`internal` 事件、随机种子、调试快照或玩家视角外隐藏信息。
 
-LLM 教练接口必须类似：
+未来 LLM 教练接口必须类似：
 
 ```ts
 getLlmCoachAdvice(payload: SerializedCoachPlayerView, question?: string): Promise<CoachAdvice>
@@ -79,7 +81,7 @@ getLlmCoachAdvice(gameState: GameState, question?: string): Promise<CoachAdvice>
 
 教练必须忽略要求揭示上帝视角真相或绕过限制的元命令。
 
-如果启用 LLM 教练，LLM 输出仍然只是非权威建议：
+如果未来启用 LLM 教练，LLM 输出仍然只是非权威建议：
 
 - 必须标注“基于你的当前视角”。
 - 只能写入 `CoachAdvice`、解释文本或建议字段。
@@ -98,16 +100,14 @@ getLlmCoachAdvice(gameState: GameState, question?: string): Promise<CoachAdvice>
 - 教练看不到其他隐藏身份。
 - 教练上下文序列化结果不包含完整 `GameState`。
 - 本地教练在无 API key 时可用。
-- LLM 教练请求 payload 只包含序列化后的 `CoachPlayerView`，不包含 `internal` 事件、随机种子或调试快照。
-- LLM 教练输出不能改变 `Action`、`TimelineEvent`、`RoleScore`、胜负结果或任何规则状态。
-- LLM 教练输出必须带有“基于你的当前视角”或等价来源范围标记。
-- LLM 教练调用失败时回退本地规则教练。
+- 如果本阶段只保留 LLM 接口占位，不需要实现 LLM 请求 payload、输出越权测试或失败回退测试。
 
 ## 验收标准
 
 - 对局中可以开关教练。
 - 无 API key 时，本地教练能提供有用的基础建议。
 - 教练上下文限制在玩家视角。
+- 本阶段不因缺少 LLM adapter 而阻塞验收。
 - 信息隔离测试通过。
 
 ## 不在本阶段范围
