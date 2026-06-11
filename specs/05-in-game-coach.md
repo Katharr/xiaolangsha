@@ -39,7 +39,19 @@ buildCoachPlayerView(gameState: GameState, humanPlayerId: PlayerId): CoachPlayer
 getLocalCoachAdvice(context: CoachPlayerView, question?: string): CoachAdvice
 ```
 
-可选 LLM 适配器只能接收序列化后的 `CoachPlayerView`。
+可选 LLM 适配器只能接收序列化后的 `CoachPlayerView`，不能接收完整 `GameState`、`internal` 事件、随机种子、调试快照或玩家视角外隐藏信息。
+
+LLM 教练接口必须类似：
+
+```ts
+getLlmCoachAdvice(payload: SerializedCoachPlayerView, question?: string): Promise<CoachAdvice>
+```
+
+禁止出现：
+
+```ts
+getLlmCoachAdvice(gameState: GameState, question?: string): Promise<CoachAdvice>
+```
 
 ## 教练功能
 
@@ -67,6 +79,14 @@ getLocalCoachAdvice(context: CoachPlayerView, question?: string): CoachAdvice
 
 教练必须忽略要求揭示上帝视角真相或绕过限制的元命令。
 
+如果启用 LLM 教练，LLM 输出仍然只是非权威建议：
+
+- 必须标注“基于你的当前视角”。
+- 只能写入 `CoachAdvice`、解释文本或建议字段。
+- 不能替玩家提交行动、修改投票、修改时间轴、修改规则结果或修改评分。
+- 当问题需要玩家视角外信息才能回答时，必须说明“当前视角证据不足”，不能编造隐藏身份或夜晚行动。
+- LLM 调用失败时回退本地规则教练，不影响对局继续。
+
 ## 测试要求
 
 添加测试覆盖：
@@ -78,6 +98,10 @@ getLocalCoachAdvice(context: CoachPlayerView, question?: string): CoachAdvice
 - 教练看不到其他隐藏身份。
 - 教练上下文序列化结果不包含完整 `GameState`。
 - 本地教练在无 API key 时可用。
+- LLM 教练请求 payload 只包含序列化后的 `CoachPlayerView`，不包含 `internal` 事件、随机种子或调试快照。
+- LLM 教练输出不能改变 `Action`、`TimelineEvent`、`RoleScore`、胜负结果或任何规则状态。
+- LLM 教练输出必须带有“基于你的当前视角”或等价来源范围标记。
+- LLM 教练调用失败时回退本地规则教练。
 
 ## 验收标准
 

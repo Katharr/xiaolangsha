@@ -73,6 +73,28 @@ decideAction(gameState: GameState): Action
 - 局内教练是玩家视角教练，能看到玩家自己的身份和私有信息，但不能看到玩家视角外的信息。
 - LLM 只能收到过滤后的视角上下文，不能收到完整 `GameState`。
 
+## LLM 权限边界
+
+LLM 在“小狼杀”中永远是表达与解释层，不是规则层、决策层或评分层。所有 LLM 功能默认关闭，只有用户显式配置 API key 并开启对应功能后才可调用。无 API key 时，游戏、脚本 AI、模板发言、固定函数评分、本地脚本复盘必须完整可用。
+
+LLM 可以用于：
+
+- 基于 `CoachPlayerView` 生成局内建议、术语解释和发言建议。
+- 基于赛后复盘载荷生成更自然的复盘讲解。
+- 基于 `SpeechIntent` 润色 AI 玩家的公开发言文本。
+
+LLM 不得：
+
+- 修改 `GameState`。
+- 执行、提交或覆盖任何 `Action`。
+- 修改胜负结果、规则结算、时间轴事件或脚本评分。
+- 替代 `scorePlayerGame` 或任何固定评分函数。
+- 修改 `RoleScore`、`TimelineEvent`、规则集配置、胜利条件或随机结果。
+- 获得完整 `GameState`、`internal` 事件、随机种子、调试快照或当前调用视角外的隐藏信息。
+- 把未经时间轴或视角上下文支撑的内容写成规则事实。
+
+LLM 输出只能写入建议、文本、解释类字段，例如 `CoachAdvice`、可选 AI 复盘文本、`speech_rendered` 的润色文本或对应的非权威元数据。LLM 输出必须保留来源范围或非权威标记，例如“基于你的当前视角”“基于赛后复盘数据”，或在发言润色记录中保存 `source: "llm_speech_render"`、`authoritative: false`。如果 LLM 输出与结构化意图、时间轴证据或允许视角冲突，必须丢弃、降级为模板输出，或标记为不可采信。
+
 ## 时间轴可见性
 
 所有关键行为必须写入时间轴。时间轴事件必须带可见性，至少包含：
@@ -81,6 +103,47 @@ decideAction(gameState: GameState): Action
 - `private`: 仅指定玩家可见。
 - `wolf_team`: 狼人阵营可见。
 - `post_game`: 赛后解密可见。
+- `internal`: 系统内部可见，不进入玩家视图、教练视图、AI 视图或默认赛后复盘。
+
+### 事件类型和可见范围
+
+| 事件类型 | 对局中可见范围 | 局内教练可见范围 | 赛后复盘可见范围 | 说明 |
+| --- | --- | --- | --- | --- |
+| `game_created` | `public` | 玩家视角可见 | 可见 | 规则集、座位数量、胜利模式等公开设置。 |
+| `role_assigned` | `private` 给对应玩家；狼人额外通过 `wolf_team` 看到队友 | 玩家自己的角色可见 | `post_game` 全部可见 | 平民、预言家、女巫不能看到他人身份。 |
+| `wolf_team_revealed` | `wolf_team` | 仅当玩家是狼人时可见 | `post_game` 可见 | 只显示狼队友，不显示神职身份。 |
+| `phase_changed` | `public` | 玩家视角可见 | 可见 | 阶段变化不含隐藏信息。 |
+| `night_action_requested` | `private` 给行动者或 `wolf_team` | 玩家是行动者时可见 | 可见 | 例如“请选择查验目标”，不公开给其他阵营。 |
+| `night_action_submitted` | `private` 给行动者；狼人刀人用 `wolf_team` | 玩家视角内可见 | `post_game` 可见 | 只记录行动者和合法目标；对局中不泄露给无关玩家。 |
+| `seer_check_result` | `private` 给预言家本人 | 玩家是该预言家时可见 | `post_game` 可见 | 只显示查验阵营或规则允许结果，不公开身份链路。 |
+| `witch_death_prompt` | `private` 给女巫本人 | 玩家是女巫时可见 | `post_game` 可见 | 女巫夜晚看到的死亡信息按规则给出。 |
+| `witch_potion_state_changed` | `private` 给女巫本人 | 玩家是女巫时可见 | `post_game` 可见 | 药水剩余状态不能公开。 |
+| `night_death_announced` | `public` | 玩家视角可见 | 可见 | 公布死亡玩家，不公布身份，除非规则明确要求。 |
+| `speech_intent_recorded` | `post_game` 或行动者 `private` | 玩家自己的意图可见；他人意图赛后可见 | `post_game` 可见 | 结构化意图用于评分复盘；对局中其他玩家只看渲染文本。 |
+| `speech_rendered` | `public` | 玩家视角可见 | 可见 | 白天公开发言文本。 |
+| `vote_submitted` | `public` 或按规则延迟公开 | 玩家视角可见 | 可见 | MVP 默认公开投票；若后续规则有匿名票，再单独标记。 |
+| `vote_result_resolved` | `public` | 玩家视角可见 | 可见 | 票型、平票、重投、放逐候选。 |
+| `exile_resolved` | `public` | 玩家视角可见 | 可见 | 公布出局玩家；身份是否公开由规则决定，MVP 默认不公开。 |
+| `win_condition_checked` | `internal` 对局中不可见 | 不可见 | 可作为 `post_game` 摘要可见 | 对局中不能暴露“接近屠边/屠城”的隐藏判断细节。 |
+| `game_over` | `public` | 玩家视角可见 | 可见 | 公布获胜阵营，然后进入赛后解密。 |
+| `post_game_role_reveal` | 对局中不可见 | 对局中不可见 | `post_game` 可见 | 只在游戏结束后揭示所有身份。 |
+| `ai_decision_reason` | 对局中不可见，行动者也默认不可见 | 不可见 | `post_game` 可见 | 赛后解释 AI 为什么行动；不得包含 AI 偷看的信息。 |
+| `coach_question` | `private` 给人类玩家 | 玩家视角可见 | 可按设置进入复盘 | 玩家向教练提问的内容。 |
+| `coach_advice` | `private` 给人类玩家 | 玩家视角可见 | 可按设置进入复盘 | 教练建议基于玩家当前视角。 |
+| `llm_request_payload` | `internal` | 不可见 | 默认不可见 | 不进入普通复盘；仅开发调试可用，且必须脱敏。 |
+| `system_seed_or_rng` | `internal` | 不可见 | 默认不可见 | 随机种子、内部调试信息不能进入玩家/AI/LLM 视图。 |
+
+### 不得对局中可见的信息
+
+以下信息在游戏结束前不得出现在 `public`、无关玩家 `private`、局内教练视角或 LLM 上下文中：
+
+- 其他玩家真实身份。
+- 预言家未公开的查验结果。
+- 女巫未公开的药水状态和夜晚选择。
+- 狼人夜晚选择，除狼人阵营视角外。
+- 胜负判断的隐藏中间状态，例如“还差一个平民就屠边成功”。
+- AI 内部怀疑分、隐藏策略权重、未公开决策理由。
+- 完整 `GameState`、随机种子、调试快照。
 
 时间轴应能支持三种视图：
 
@@ -149,6 +212,34 @@ npm run build
 ```
 
 涉及 UI 的阶段还必须运行 Playwright 冒烟测试。涉及视角、AI、教练、LLM 的阶段必须包含信息隔离测试。
+
+### 必须包含的多视角防泄露测试
+
+从 `specs/01-domain-model-and-ruleset.md` 开始，凡是新增或修改 `GameState`、时间轴事件、视角构造器、AI 上下文、教练上下文、LLM 上下文，都必须增加或更新“多视角信息泄露矩阵测试”。
+
+该测试必须使用同一份固定种子 `GameState`，同时构造以下视图并互相比对：
+
+- 平民 `PlayerView`。
+- 狼人 `AiPlayerView`。
+- 预言家 `AiPlayerView` 或 `PlayerView`。
+- 女巫 `AiPlayerView` 或 `PlayerView`。
+- 人类玩家 `CoachPlayerView`。
+- 公开时间轴视图。
+- 赛后复盘视图。
+- 如果阶段涉及 LLM，还必须包含 LLM 请求上下文。
+
+测试必须证明：
+
+- 平民视图没有任何其他玩家真实身份。
+- 狼人视图只知道狼队友，不知道预言家、女巫或平民的真实身份。
+- 预言家视图只知道自己的查验结果，不知道未查验玩家身份。
+- 女巫视图只知道规则允许的夜晚死亡信息和自己的药水状态。
+- 教练视图等同人类玩家视角，可以看到玩家自己的身份和私有信息，但不能看到玩家视角外的隐藏信息。
+- 公开时间轴不包含私密夜晚行动、隐藏身份、查验结果、药水状态、AI 内部理由、完整 `GameState`、随机种子或调试快照。
+- 赛后复盘视图可以看到 `post_game` 信息，但默认不包含 `internal` 信息。
+- LLM 请求上下文不得包含完整 `GameState`、`internal` 事件或行动者视角外的隐藏信息。
+- LLM 输出不得改变 `Action`、`RoleScore`、`TimelineEvent`、胜负结果或任何规则状态字段。
+- 所有 LLM 输出必须带有来源范围或非权威标记，避免玩家把自然语言解释误当成规则事实。
 
 ## 当前 SPEC 未要求时禁止实现
 

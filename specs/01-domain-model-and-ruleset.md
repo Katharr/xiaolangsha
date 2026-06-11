@@ -69,6 +69,35 @@ AI 模块只能接收 `AiPlayerView`。教练模块只能接收 `CoachPlayerView
 - `private`: 仅指定玩家可见。
 - `wolf_team`: 狼人阵营视角可见。
 - `post_game`: 仅赛后复盘可见。
+- `internal`: 系统内部可见，不进入玩家视图、教练视图、AI 视图或默认赛后复盘。
+
+事件可见性必须由结构化字段表达，不要只靠事件名称约定。建议事件包含：
+
+```ts
+type TimelineVisibility =
+  | { kind: "public" }
+  | { kind: "private"; playerIds: PlayerId[] }
+  | { kind: "wolf_team" }
+  | { kind: "post_game" }
+  | { kind: "internal" };
+```
+
+视角构造器必须按 `TimelineVisibility` 过滤事件：
+
+- `buildPlayerView`: 只返回该玩家当前可见的事件。
+- `buildAiPlayerView`: 只返回该 AI 玩家当前可见的事件。
+- `buildCoachPlayerView`: 返回人类玩家当前可见的事件，以及玩家自己的身份和私有信息。
+- 赛后复盘视图：游戏结束后可以返回 `post_game` 事件，但默认不返回 `internal` 事件。
+
+典型事件可见性：
+
+| 事件类型 | 可见性 |
+| --- | --- |
+| `game_created`、`phase_changed`、`speech_rendered`、`vote_result_resolved`、`game_over` | `public` |
+| `role_assigned`、`seer_check_result`、`witch_death_prompt`、`witch_potion_state_changed` | `private` |
+| `wolf_team_revealed`、狼人夜晚刀人提交 | `wolf_team` |
+| 全身份揭晓、隐藏夜晚行动、AI 决策理由 | `post_game` |
+| 随机种子、完整状态快照、LLM 原始请求载荷、调试日志 | `internal` |
 
 ## 测试要求
 
@@ -81,6 +110,20 @@ AI 模块只能接收 `AiPlayerView`。教练模块只能接收 `CoachPlayerView
 - 预言家视角只显示自己的身份和未来查验结果占位。
 - 女巫视角只显示自己的身份和药水状态占位。
 - 教练视角能显示人类玩家自己的身份，但不显示其他隐藏身份。
+- 必须新增 `multi-view-leakage` 测试：使用同一份固定种子 `GameState` 同时生成平民、狼人、预言家、女巫、教练、公开时间轴和赛后复盘视图，证明没有跨视角泄露信息。
+
+### 多视角泄露测试要求
+
+`multi-view-leakage` 测试至少断言：
+
+- 平民视图没有任何其他玩家真实身份字段。
+- 狼人视图包含狼队友，但不包含预言家、女巫或平民真实身份。
+- 预言家视图不包含未查验玩家身份。
+- 女巫视图不包含其他玩家身份，也不泄露狼人刀人来源。
+- 教练视图能看到人类玩家自己的身份，但不能看到玩家视角外的身份。
+- 公开时间轴不包含 `private`、`wolf_team`、`post_game`、`internal` 事件。
+- 赛后复盘视图包含 `post_game` 事件，但不包含 `internal` 事件。
+- 所有非 domain 视图序列化后都不包含完整 `GameState`、随机种子、调试快照。
 
 ## 验收标准
 
@@ -89,6 +132,7 @@ AI 模块只能接收 `AiPlayerView`。教练模块只能接收 `CoachPlayerView
 - `total_elimination` 已表示，但不需要 UI 支持。
 - 视角构造器以领域接口或最小实现形式存在。
 - 信息隔离测试通过。
+- 多视角信息泄露矩阵测试通过。
 
 ## 不在本阶段范围
 
