@@ -1,6 +1,7 @@
 import type {
   Camp,
   CurrentDayState,
+  AiDecisionReasonPayload,
   GameState,
   Phase,
   PlayerId,
@@ -678,6 +679,26 @@ export function submitSpeechIntent(
     payload: {
       actorId: actor.id,
       text: renderedText
+    }
+  });
+}
+
+export function recordAiDecisionReason(
+  gameState: GameState,
+  actorId: PlayerId,
+  reason: AiDecisionReasonPayload
+): GameState {
+  const actor = getPlayer(gameState, actorId);
+
+  return appendEvent(gameState, {
+    type: "ai_decision_reason",
+    actorId: actor.id,
+    targetId: reason.targetId,
+    visibility: { kind: "post_game" },
+    summary: `${actor.seat}号 AI 记录结构化决策理由`,
+    payload: {
+      actorId: actor.id,
+      reason
     }
   });
 }

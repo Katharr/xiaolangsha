@@ -149,6 +149,14 @@ export interface WinCheckResult {
     | "no_winner";
 }
 
+export interface AiDecisionReasonPayload {
+  actorId: PlayerId;
+  candidateScores: Record<PlayerId, { suspicion: number; trust: number }>;
+  chosenAction: string;
+  summary: string;
+  targetId?: PlayerId;
+}
+
 export type PlayerPrivateInfo =
   | { kind: "werewolf"; teammateIds: PlayerId[] }
   | { kind: "seer"; checkResults: SeerCheckResult[] }

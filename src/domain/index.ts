@@ -3,6 +3,7 @@ export { createInitialGameState } from "./state";
 export { TIMELINE_EVENT_TYPES, TIMELINE_VISIBILITY_KINDS } from "./types";
 export {
   checkWinCondition,
+  recordAiDecisionReason,
   resolveExile,
   resolveNight,
   resolveVote,
@@ -22,6 +23,7 @@ export {
   buildPublicTimelineView
 } from "./views";
 export type {
+  AiDecisionReasonPayload,
   AiPlayerView,
   Camp,
   CoachPlayerView,
