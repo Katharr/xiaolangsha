@@ -10,7 +10,7 @@ export type Role = "werewolf" | "seer" | "witch" | "villager";
 
 export type Camp = "werewolf" | "good";
 
-export type Phase = "setup" | "night" | "day" | "ended";
+export type Phase = "setup" | "night" | "day_speech" | "day_vote" | "exile" | "ended";
 
 export type PlayerStatus = "alive" | "dead";
 
@@ -33,6 +33,14 @@ export interface Ruleset {
   supportedWinConditionModes: WinConditionMode[];
 }
 
+export const TIMELINE_VISIBILITY_KINDS = [
+  "public",
+  "private",
+  "wolf_team",
+  "post_game",
+  "internal"
+] as const;
+
 export type TimelineVisibility =
   | { kind: "public" }
   | { kind: "private"; playerIds: PlayerId[] }
@@ -40,24 +48,47 @@ export type TimelineVisibility =
   | { kind: "post_game" }
   | { kind: "internal" };
 
-export type TimelineEventType =
-  | "game_created"
-  | "role_assigned"
-  | "wolf_team_revealed"
-  | "phase_changed"
-  | "seer_check_result"
-  | "witch_potion_state_changed"
-  | "post_game_role_reveal"
-  | "system_seed_or_rng"
-  | "complete_state_snapshot";
+export const TIMELINE_EVENT_TYPES = [
+  "game_created",
+  "role_assigned",
+  "wolf_team_revealed",
+  "phase_changed",
+  "night_action_requested",
+  "night_action_submitted",
+  "seer_check_result",
+  "witch_death_prompt",
+  "witch_potion_state_changed",
+  "night_death_announced",
+  "speech_intent_recorded",
+  "speech_rendered",
+  "vote_submitted",
+  "vote_result_resolved",
+  "exile_resolved",
+  "win_condition_checked",
+  "game_over",
+  "post_game_role_reveal",
+  "ai_decision_reason",
+  "coach_question",
+  "coach_advice",
+  "llm_request_payload",
+  "system_seed_or_rng",
+  "complete_state_snapshot"
+] as const;
+
+export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
 
 export interface TimelineEvent {
   id: string;
   type: TimelineEventType;
+  phase: Phase;
   day: number;
   order: number;
+  actorId?: PlayerId;
+  targetId?: PlayerId;
   visibility: TimelineVisibility;
+  summary: string;
   payload: Record<string, unknown>;
+  postGameVisible?: boolean;
 }
 
 export interface SeerCheckResult {
@@ -68,6 +99,54 @@ export interface SeerCheckResult {
 export interface WitchPotionState {
   antidote: boolean;
   poison: boolean;
+}
+
+export interface WitchNightAction {
+  useAntidote?: boolean;
+  poisonTargetId?: PlayerId | null;
+}
+
+export interface SpeechIntent {
+  kind: string;
+  summary: string;
+  claimedRole?: Role;
+  targetId?: PlayerId;
+}
+
+export interface CurrentNightState {
+  number: number;
+  werewolfKill: {
+    actorId: PlayerId;
+    targetId: PlayerId;
+  } | null;
+  seerChecks: Record<PlayerId, PlayerId>;
+  witchActions: Record<PlayerId, WitchNightAction>;
+  resolved: boolean;
+}
+
+export interface CurrentDayState {
+  number: number;
+  speeches: Record<
+    PlayerId,
+    {
+      intent: SpeechIntent;
+      renderedText: string;
+    }
+  >;
+  voteRound: 1 | 2;
+  votesByRound: Record<number, Record<PlayerId, PlayerId>>;
+  revoteCandidateIds: PlayerId[] | null;
+  exileCandidateId: PlayerId | null;
+}
+
+export interface WinCheckResult {
+  winner: Camp | null;
+  reason:
+    | "all_werewolves_dead"
+    | "all_villagers_dead"
+    | "all_specials_dead"
+    | "all_good_dead"
+    | "no_winner";
 }
 
 export type PlayerPrivateInfo =
@@ -82,6 +161,7 @@ export interface GameState {
   winConditionMode: WinConditionMode;
   phase: Phase;
   day: number;
+  winner: Camp | null;
   humanPlayerId: PlayerId;
   seats: Seat[];
   players: PlayerState[];
@@ -89,6 +169,8 @@ export interface GameState {
   seed: string;
   seerResults: Record<PlayerId, SeerCheckResult[]>;
   witchPotions: Record<PlayerId, WitchPotionState>;
+  currentNight: CurrentNightState | null;
+  currentDay: CurrentDayState;
   debugSnapshot: {
     createdBy: "src/domain";
     note: string;

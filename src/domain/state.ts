@@ -15,6 +15,8 @@ interface CreateInitialGameStateOptions {
   rulesetId: Ruleset["id"];
   seed: string;
   humanPlayerId: PlayerId;
+  roleOrder?: Role[];
+  winConditionMode?: Ruleset["defaultWinConditionMode"];
 }
 
 function campForRole(role: Role): Camp {
@@ -81,18 +83,27 @@ function createRoleAssignedEvents(players: PlayerState[]) {
   return players.map<TimelineEvent>((player, index) => ({
     id: `event-role-assigned-${player.id}`,
     type: "role_assigned",
+    phase: "setup",
     day: 0,
     order: index + 2,
+    actorId: player.id,
     visibility: { kind: "private", playerIds: [player.id] },
+    summary: `${player.seat}号获得自己的身份`,
     payload: {
       playerId: player.id,
       role: player.role,
       camp: player.camp
-    }
+    },
+    postGameVisible: true
   }));
 }
 
-function createInitialTimeline(ruleset: Ruleset, players: PlayerState[], seed: string) {
+function createInitialTimeline(
+  ruleset: Ruleset,
+  players: PlayerState[],
+  seed: string,
+  winConditionMode: Ruleset["defaultWinConditionMode"]
+) {
   const werewolfIds = players
     .filter((player) => player.role === "werewolf")
     .map((player) => player.id);
@@ -101,21 +112,25 @@ function createInitialTimeline(ruleset: Ruleset, players: PlayerState[], seed: s
     {
       id: "event-game-created",
       type: "game_created",
+      phase: "setup",
       day: 0,
       order: 0,
       visibility: { kind: "public" },
+      summary: `创建 ${ruleset.id} 对局`,
       payload: {
         playerCount: ruleset.playerCount,
         rulesetId: ruleset.id,
-        winConditionMode: ruleset.defaultWinConditionMode
+        winConditionMode
       }
     },
     {
       id: "event-phase-setup",
       type: "phase_changed",
+      phase: "setup",
       day: 0,
       order: 1,
       visibility: { kind: "public" },
+      summary: "进入设置阶段",
       payload: {
         phase: "setup"
       }
@@ -124,31 +139,24 @@ function createInitialTimeline(ruleset: Ruleset, players: PlayerState[], seed: s
     {
       id: "event-wolf-team-revealed",
       type: "wolf_team_revealed",
+      phase: "setup",
       day: 0,
       order: 8,
       visibility: { kind: "wolf_team" },
+      summary: "狼人阵营确认队友",
       payload: {
         werewolfIds
-      }
-    },
-    {
-      id: "event-post-game-role-reveal",
-      type: "post_game_role_reveal",
-      day: 0,
-      order: 9,
-      visibility: { kind: "post_game" },
-      payload: {
-        rolesByPlayerId: Object.fromEntries(
-          players.map((player) => [player.id, player.role])
-        )
-      }
+      },
+      postGameVisible: true
     },
     {
       id: "event-system-seed",
       type: "system_seed_or_rng",
+      phase: "setup",
       day: 0,
-      order: 10,
+      order: 9,
       visibility: { kind: "internal" },
+      summary: "记录内部随机种子",
       payload: {
         seed
       }
@@ -156,9 +164,11 @@ function createInitialTimeline(ruleset: Ruleset, players: PlayerState[], seed: s
     {
       id: "event-complete-state-snapshot",
       type: "complete_state_snapshot",
+      phase: "setup",
       day: 0,
-      order: 11,
+      order: 10,
       visibility: { kind: "internal" },
+      summary: "记录内部调试快照占位",
       payload: {
         reason: "debug-only"
       }
@@ -168,17 +178,29 @@ function createInitialTimeline(ruleset: Ruleset, players: PlayerState[], seed: s
 
 export function createInitialGameState({
   humanPlayerId,
+  roleOrder,
   rulesetId,
-  seed
+  seed,
+  winConditionMode
 }: CreateInitialGameStateOptions): GameState {
   const ruleset = getRuleset(rulesetId);
   const playerIds = Array.from({ length: ruleset.playerCount }, (_, index) => `p${index + 1}`);
+  const selectedWinConditionMode = winConditionMode ?? ruleset.defaultWinConditionMode;
 
   if (!playerIds.includes(humanPlayerId)) {
     throw new Error(`Human player ${humanPlayerId} is not seated in ${ruleset.id}`);
   }
 
-  const roles = shuffleRoles(ruleset.roles, seed);
+  if (!ruleset.supportedWinConditionModes.includes(selectedWinConditionMode)) {
+    throw new Error(`Unsupported win condition mode: ${selectedWinConditionMode}`);
+  }
+
+  const roles = roleOrder ? [...roleOrder] : shuffleRoles(ruleset.roles, seed);
+
+  if (roles.length !== ruleset.playerCount) {
+    throw new Error(`Role order for ${ruleset.id} must contain ${ruleset.playerCount} roles`);
+  }
+
   const seats = createSeats(playerIds);
   const players = createPlayers(playerIds, roles);
   const witchPotions = Object.fromEntries(
@@ -196,18 +218,31 @@ export function createInitialGameState({
   return {
     id: `game-${hashSeed(seed).toString(16)}`,
     ruleset,
-    winConditionMode: ruleset.defaultWinConditionMode,
+    winConditionMode: selectedWinConditionMode,
     phase: "setup",
     day: 0,
+    winner: null,
     humanPlayerId,
     seats,
     players,
-    timeline: createInitialTimeline(ruleset, players, seed),
+    timeline: createInitialTimeline(ruleset, players, seed, selectedWinConditionMode),
     seed,
     seerResults: Object.fromEntries(
       players.filter((player) => player.role === "seer").map((player) => [player.id, []])
     ),
     witchPotions,
+    currentNight: null,
+    currentDay: {
+      number: 0,
+      speeches: {},
+      voteRound: 1,
+      votesByRound: {
+        1: {},
+        2: {}
+      },
+      revoteCandidateIds: null,
+      exileCandidateId: null
+    },
     debugSnapshot: {
       createdBy: "src/domain",
       note: "Full GameState is for domain use only."

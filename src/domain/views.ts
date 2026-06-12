@@ -96,7 +96,8 @@ function buildPrivateInfo(gameState: GameState, viewer: PlayerState): PlayerPriv
   if (viewer.role === "witch") {
     return {
       kind: "witch",
-      nightDeathCandidateId: null,
+      nightDeathCandidateId:
+        gameState.phase === "night" ? gameState.currentNight?.werewolfKill?.targetId ?? null : null,
       potions: gameState.witchPotions[viewer.id] ?? {
         antidote: false,
         poison: false
@@ -112,7 +113,7 @@ function buildPrivateInfo(gameState: GameState, viewer: PlayerState): PlayerPriv
 function buildBasePlayerView(
   gameState: GameState,
   playerId: PlayerId,
-  perspective: PlayerView["perspective"] | AiPlayerView["perspective"] | CoachPlayerView["perspective"],
+  _perspective: PlayerView["perspective"] | AiPlayerView["perspective"] | CoachPlayerView["perspective"],
   options: { includeWolfTeam: boolean }
 ): PlayerView {
   const viewer = getPlayer(gameState, playerId);
@@ -180,6 +181,9 @@ export function buildPublicTimelineView(gameState: GameState): TimelineEvent[] {
 
 export function buildPostGameTimelineView(gameState: GameState): TimelineEvent[] {
   return gameState.timeline.filter(
-    (event) => event.visibility.kind === "public" || event.visibility.kind === "post_game"
+    (event) =>
+      event.visibility.kind === "public" ||
+      event.visibility.kind === "post_game" ||
+      event.postGameVisible === true
   );
 }
