@@ -1,0 +1,35 @@
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: #18202f;
+  background:
+    linear-gradient(135deg, rgba(105, 136, 116, 0.18), transparent 34%),
+    #f5f7f2;
+}
+
+.shell-panel {
+  width: min(520px, 100%);
+  padding: 32px;
+  border: 1px solid #c8d0c0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.shell-kicker {
+  margin: 0 0 12px;
+  color: #586152;
+  font-size: 0.875rem;
+}
+
+.shell-panel h1 {
+  margin: 0 0 16px;
+  font-size: 2.5rem;
+  line-height: 1.1;
+}
+
+.shell-panel p {
+  margin: 0;
+  line-height: 1.6;
+}
