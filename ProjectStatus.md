@@ -8,7 +8,9 @@
 
 `S8-SLICE-02 / P9-S02` 共享模型与错误协议已完成 Developer 实现和 Reviewer 审查。
 
-`S8-SLICE-03 / P9-S03` 开局、补位、身份揭示已完成 Developer 实现和 Reviewer 复审；下一步进入 `S8-SLICE-04 / P9-S04`：首夜与夜晚结算。
+`S8-SLICE-03 / P9-S03` 开局、补位、身份揭示已完成 Developer 实现和 Reviewer 复审。
+
+`S8-SLICE-04 / P9-S04` 首夜与夜晚结算已完成 Developer 实现和 Reviewer 复审；下一步进入 `S8-SLICE-05 / P9-S05`：天亮播报与顺次发言。
 
 ## 已锁定的关键决策
 
@@ -41,6 +43,7 @@
 2. `S8-SLICE-02 / P9-S02` 仅覆盖 `RULE-008`、`STATE-001`、`AI-002`、`STORE-002`、`STORE-003` 的共享协议/schema 前置部分；重复提交幂等、状态机动作合法性、AI 重试降级、事件重放和恢复失败清空入口仍属于后续切片。
 3. `S8-SLICE-03 / P9-S03` 已完成：新增 `rules` 规则层开局入口，支持标准局/自由局创建、5 人身份补位、真人身份揭示、初始 `TruthEvent`、`GameSnapshot` 和真人 `VisibleInformationSnapshot`；覆盖 `RULE-001`、`RULE-008`、`STATE-001`、`ISO-001`。
 4. `S8-SLICE-03 / P9-S03` 已知限制：仅推进到 `night_action` 前状态，不实现夜晚行动与结算；自由局需先 `create_game` 进入 `role_setup`，再由 `confirm_role_setup` 固定真人身份并补齐 AI；已有对局中重复 `create_game` 已按 `STATE-001` 拒绝。
-5. 下一步任务为 `S8-SLICE-04 / P9-S04`：实现狼人/预言家夜晚动作、首夜禁止刀真人、死亡不亮身份、夜后胜负检查；关联验收编号为 `RULE-002`、`RULE-005`、`RULE-006`、`RULE-007`、`RULE-008`、`ISO-003`、`ISO-004`。
-6. 阶段9后续切片必须继续提交切片编号、验收编号、验证证据、已知限制和 Reviewer 结论；缺少证据、破坏 `ISO-001`/`ISO-002` 或违反模块边界时必须驳回。
-7. `S8-SLICE-12` 通过 Reviewer Agent 后，进入阶段10并触发项目负责人执行 `HITL-001`；阶段9普通切片通过后暂不触发 HITL。
+5. `S8-SLICE-04 / P9-S04` 已完成：新增 `submit_night_action` 规则入口，支持狼人击杀、预言家查验、夜晚结算、夜死不亮身份、夜后胜负检查，并覆盖首夜禁止刀真人、自刀/非法目标拒绝、同 `idempotencyKey` 重放不产生重复事实、夜转昼轮次推进；覆盖 `RULE-002`、`RULE-005`、`RULE-006`、`RULE-007`、`RULE-008`、`ISO-003`、`ISO-004`。
+6. 下一步任务为 `S8-SLICE-05 / P9-S05`：实现天亮播报与顺次发言；关联验收编号以 `docs/phase-8-development-breakdown.md` 对应切片和阶段6验收矩阵为准，必须继续保持死亡身份局中不公开、消息流不成为事实源。
+7. 阶段9后续切片必须继续提交切片编号、验收编号、验证证据、已知限制和 Reviewer 结论；缺少证据、破坏 `ISO-001`/`ISO-002` 或违反模块边界时必须驳回。
+8. `S8-SLICE-12` 通过 Reviewer Agent 后，进入阶段10并触发项目负责人执行 `HITL-001`；阶段9普通切片通过后暂不触发 HITL。

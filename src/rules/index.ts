@@ -1,13 +1,17 @@
 import type {
   GameAction,
+  GamePhase,
   GameMode,
   GameSession,
   GameSnapshot,
+  NightActionType,
   PendingAction,
+  Player,
   Result,
   RoundRef,
   TruthEvent,
   VisibleInformationSnapshot,
+  WinReason,
 } from "../shared";
 import { err, gameActionSchema, ok } from "../shared";
 import { getBoardConfig } from "./boards";
@@ -61,6 +65,8 @@ export function applyAction(
       return confirmRoleSetup(validAction, context, previousEvents);
     case "confirm_role_reveal":
       return confirmRoleReveal(validAction, context, previousEvents);
+    case "submit_night_action":
+      return submitNightAction(validAction, context, previousEvents);
     default:
       return rulesError("ACTION_NOT_ALLOWED", "Action is not allowed in this slice.");
   }
@@ -307,6 +313,390 @@ function confirmRoleReveal(
   });
 }
 
+function submitNightAction(
+  action: Extract<GameAction, { type: "submit_night_action" }>,
+  context: RuleEngineContext,
+  previousEvents: TruthEvent[],
+): Result<RuleEngineSuccess> {
+  if (!context.session || !context.snapshot || !context.snapshot.nightState) {
+    return rulesError("INVALID_ACTION", "Night action requires an existing night.");
+  }
+
+  const actor = context.snapshot.players.find(
+    (player) => player.playerId === action.actorId,
+  );
+  const expectedActionType = getNightActionTypeForActor(actor);
+
+  if (
+    context.snapshot.gamePhase !== "night_action" ||
+    context.snapshot.nightState.resolved ||
+    !actor?.alive ||
+    !expectedActionType ||
+    action.actionType !== expectedActionType ||
+    !context.snapshot.nightState.requiredActorIds.includes(action.actorId) ||
+    context.snapshot.nightState.submittedActorIds.includes(action.actorId)
+  ) {
+    return rulesError("ACTION_NOT_ALLOWED", "Night action is not allowed now.");
+  }
+
+  if (!action.targetId) {
+    return rulesError("INVALID_ACTION", "Night action target is required.");
+  }
+
+  const target = context.snapshot.players.find(
+    (player) => player.playerId === action.targetId,
+  );
+
+  if (!target || !isLegalNightTarget(actor, target, context.snapshot)) {
+    return rulesError("ACTION_NOT_ALLOWED", "Night action target is not legal.");
+  }
+
+  const nextSeq = context.snapshot.lastEventSeq + 1;
+  const submittedEvent = buildEvent({
+    gameId: context.session.gameId,
+    seq: nextSeq,
+    type: "night_action_submitted",
+    phase: "night_action",
+    source: actor.controller,
+    actorId: action.actorId,
+    payload: {
+      actorId: action.actorId,
+      actionType: action.actionType,
+      targetId: action.targetId,
+    },
+    idempotencyKey: action.idempotencyKey,
+    now: context.now,
+    round: context.snapshot.round,
+    visibility: {
+      public: false,
+      visibleTo: [action.actorId],
+      revealInReview: true,
+    },
+  });
+  const submittedActorIds = [
+    ...context.snapshot.nightState.submittedActorIds,
+    action.actorId,
+  ];
+  const submittedSnapshot: GameSnapshot = {
+    ...context.snapshot,
+    lastEventSeq: nextSeq,
+    nightState: {
+      ...context.snapshot.nightState,
+      submittedActorIds,
+    },
+  };
+
+  if (!hasAllNightActorsSubmitted(submittedSnapshot)) {
+    const session = updateSessionSeq(context.session, submittedSnapshot);
+
+    return ok({
+      session,
+      events: [submittedEvent],
+      snapshot: submittedSnapshot,
+      visibleInformation: buildVisibleInformation(action.actorId, submittedSnapshot, [
+        ...previousEvents,
+        submittedEvent,
+      ]),
+      nextPendingAction: submittedSnapshot.pendingAction,
+    });
+  }
+
+  return resolveNight({
+    action,
+    context,
+    previousEvents,
+    submittedEvent,
+    submittedSnapshot,
+  });
+}
+
+function resolveNight(params: {
+  action: Extract<GameAction, { type: "submit_night_action" }>;
+  context: RuleEngineContext;
+  previousEvents: TruthEvent[];
+  submittedEvent: TruthEvent;
+  submittedSnapshot: GameSnapshot;
+}): Result<RuleEngineSuccess> {
+  if (!params.context.session) {
+    return rulesError("INVALID_ACTION", "Night resolution requires a session.");
+  }
+
+  const allEventsBeforeResolution = [
+    ...params.previousEvents,
+    params.submittedEvent,
+  ];
+  const nightSubmissions = getCurrentNightSubmissions(
+    allEventsBeforeResolution,
+    params.submittedSnapshot,
+  );
+  let nextSeq = params.submittedSnapshot.lastEventSeq + 1;
+  let players = params.submittedSnapshot.players;
+  const events: TruthEvent[] = [params.submittedEvent];
+  const deathPlayerIds: string[] = [];
+  const resolutionEventIdsByActor = new Map<string, string>();
+
+  const wolfSubmission = nightSubmissions.find(
+    (event) => event.payload.actionType === "werewolf_kill",
+  );
+  const seerSubmission = nightSubmissions.find(
+    (event) => event.payload.actionType === "seer_check",
+  );
+
+  if (wolfSubmission) {
+    const targetId = String(wolfSubmission.payload.targetId);
+    const resolutionEventId = buildEventId(
+      params.context.session.gameId,
+      nextSeq,
+      "night_action_resolved",
+    );
+    resolutionEventIdsByActor.set(String(wolfSubmission.actorId), resolutionEventId);
+    events.push(
+      buildEvent({
+        gameId: params.context.session.gameId,
+        seq: nextSeq,
+        type: "night_action_resolved",
+        phase: "night_action",
+        source: "rule_engine",
+        actorId: wolfSubmission.actorId,
+        payload: {
+          actorId: wolfSubmission.actorId,
+          actionType: "werewolf_kill",
+          targetId,
+          result: {
+            kind: "kill_result",
+            targetId,
+            killed: true,
+            deathEventId: buildEventId(
+              params.context.session.gameId,
+              nextSeq + (seerSubmission ? 2 : 1),
+              "player_died",
+            ),
+          },
+        },
+        idempotencyKey: params.action.idempotencyKey,
+        now: params.context.now,
+        round: params.submittedSnapshot.round,
+        visibility: {
+          public: false,
+          visibleTo: [String(wolfSubmission.actorId)],
+          revealInReview: true,
+        },
+      }),
+    );
+    nextSeq += 1;
+  }
+
+  if (seerSubmission) {
+    const targetId = String(seerSubmission.payload.targetId);
+    const target = players.find((player) => player.playerId === targetId);
+    events.push(
+      buildEvent({
+        gameId: params.context.session.gameId,
+        seq: nextSeq,
+        type: "night_action_resolved",
+        phase: "night_action",
+        source: "rule_engine",
+        actorId: seerSubmission.actorId,
+        payload: {
+          actorId: seerSubmission.actorId,
+          actionType: "seer_check",
+          targetId,
+          result: {
+            kind: "seer_check_result",
+            targetId,
+            factionResult: target?.faction ?? "good_team",
+          },
+        },
+        idempotencyKey: params.action.idempotencyKey,
+        now: params.context.now,
+        round: params.submittedSnapshot.round,
+        visibility: {
+          public: false,
+          visibleTo: [String(seerSubmission.actorId)],
+          revealInReview: true,
+        },
+      }),
+    );
+    nextSeq += 1;
+  }
+
+  if (wolfSubmission) {
+    const targetId = String(wolfSubmission.payload.targetId);
+    const deathEvent = buildEvent({
+      gameId: params.context.session.gameId,
+      seq: nextSeq,
+      type: "player_died",
+      phase: "night_action",
+      source: "rule_engine",
+      payload: {
+        playerId: targetId,
+        deathCause: "night_kill",
+        sourceEventId:
+          resolutionEventIdsByActor.get(String(wolfSubmission.actorId)) ?? "",
+        revealRolePublicly: false,
+      },
+      idempotencyKey: params.action.idempotencyKey,
+      now: params.context.now,
+      round: params.submittedSnapshot.round,
+      visibility: {
+        public: true,
+        visibleTo: [],
+        revealInReview: true,
+      },
+    });
+    players = players.map((player) =>
+      player.playerId === targetId
+        ? {
+            ...player,
+            alive: false,
+            deathCause: "night_kill",
+            deathEventId: deathEvent.eventId,
+            isRoleVisiblePublicly: false,
+          }
+        : player,
+    );
+    deathPlayerIds.push(targetId);
+    events.push(deathEvent);
+    nextSeq += 1;
+  }
+
+  const winResult = checkWin(players);
+  const checkedAfterEventId = events[events.length - 1]?.eventId ?? params.submittedEvent.eventId;
+  events.push(
+    buildEvent({
+      gameId: params.context.session.gameId,
+      seq: nextSeq,
+      type: "win_checked",
+      phase: "night_action",
+      source: "rule_engine",
+      payload: {
+        ...(winResult
+          ? {
+              winner: winResult.winner,
+              winReason: winResult.winReason,
+            }
+          : {}),
+        checkedAfterEventId,
+      },
+      idempotencyKey: params.action.idempotencyKey,
+      now: params.context.now,
+      round: params.submittedSnapshot.round,
+      visibility: {
+        public: Boolean(winResult),
+        visibleTo: [],
+        revealInReview: true,
+      },
+    }),
+  );
+  nextSeq += 1;
+
+  const toPhase: GamePhase = winResult ? "review" : "day_announcement";
+  const nextRound = winResult
+    ? params.submittedSnapshot.round
+    : {
+        ...params.submittedSnapshot.round,
+        day: Math.max(
+          params.submittedSnapshot.round.day,
+          params.submittedSnapshot.round.night,
+        ),
+        voteRound: "none" as const,
+      };
+  events.push(
+    buildEvent({
+      gameId: params.context.session.gameId,
+      seq: nextSeq,
+      type: "phase_changed",
+      phase: "night_action",
+      source: "rule_engine",
+      payload: {
+        fromPhase: "night_action",
+        toPhase,
+        reason: winResult ? "win_condition_met" : "night_resolved",
+      },
+      idempotencyKey: params.action.idempotencyKey,
+      now: params.context.now,
+      round: params.submittedSnapshot.round,
+      visibility: {
+        public: true,
+        visibleTo: [],
+        revealInReview: true,
+      },
+    }),
+  );
+  nextSeq += 1;
+
+  if (winResult) {
+    events.push(
+      buildEvent({
+        gameId: params.context.session.gameId,
+        seq: nextSeq,
+        type: "game_ended",
+        phase: "review",
+        source: "rule_engine",
+        payload: {
+          winner: winResult.winner,
+          winReason: winResult.winReason,
+          endedAt: params.context.now,
+        },
+        idempotencyKey: params.action.idempotencyKey,
+        now: params.context.now,
+        round: params.submittedSnapshot.round,
+        visibility: {
+          public: true,
+          visibleTo: [],
+          revealInReview: true,
+        },
+      }),
+    );
+    nextSeq += 1;
+  }
+
+  const snapshot: GameSnapshot = {
+    ...params.submittedSnapshot,
+    lastEventSeq: nextSeq - 1,
+    gamePhase: toPhase,
+    round: nextRound,
+    players,
+    pendingAction: null,
+    nightState: {
+      ...params.submittedSnapshot.nightState!,
+      resolved: true,
+      deathPlayerIds,
+    },
+    humanParticipationState:
+      players.find((player) => player.isHuman)?.alive === false
+        ? "dead_spectating"
+        : params.submittedSnapshot.humanParticipationState,
+    ...(winResult
+      ? {
+          winner: winResult.winner,
+          winReason: winResult.winReason,
+          lastResolvedEventId: events[events.length - 1]?.eventId,
+        }
+      : {
+          lastResolvedEventId: events[events.length - 1]?.eventId,
+        }),
+  };
+  const session: GameSession = {
+    ...params.context.session,
+    status: winResult ? "ended" : params.context.session.status,
+    endedAt: winResult ? params.context.now : params.context.session.endedAt,
+    currentEventSeq: snapshot.lastEventSeq,
+    currentSnapshotSeq: snapshot.lastEventSeq,
+  };
+
+  return ok({
+    session,
+    events,
+    snapshot,
+    visibleInformation: buildVisibleInformation(params.action.actorId, snapshot, [
+      ...params.previousEvents,
+      ...events,
+    ]),
+    nextPendingAction: snapshot.pendingAction,
+  });
+}
+
 function buildNoopResult(
   action: GameAction,
   context: RuleEngineContext,
@@ -543,14 +933,15 @@ function buildEvent(params: {
   now: string;
   visibility: TruthEvent["visibility"];
   actorId?: string;
+  round?: RoundRef;
 }): TruthEvent {
   return {
-    eventId: `${params.gameId}-${params.seq}-${params.type}`,
+    eventId: buildEventId(params.gameId, params.seq, params.type),
     gameId: params.gameId,
     seq: params.seq,
     type: params.type,
     phase: params.phase,
-    round: roundForPhase(params.phase),
+    round: params.round ?? roundForPhase(params.phase),
     actorId: params.actorId,
     source: params.source,
     payload: params.payload,
@@ -566,6 +957,14 @@ function buildEvent(params: {
   };
 }
 
+function buildEventId(
+  gameId: string,
+  seq: number,
+  type: TruthEvent["type"],
+): string {
+  return `${gameId}-${seq}-${type}`;
+}
+
 function roundForPhase(phase: TruthEvent["phase"]): RoundRef {
   if (phase === "night_action") {
     return { night: 1, day: 0, voteRound: "none" };
@@ -579,6 +978,110 @@ function hasSeenIdempotencyKey(
   idempotencyKey: string,
 ): boolean {
   return events.some((event) => event.metadata.idempotencyKey === idempotencyKey);
+}
+
+function updateSessionSeq(
+  session: GameSession,
+  snapshot: GameSnapshot,
+): GameSession {
+  return {
+    ...session,
+    currentEventSeq: snapshot.lastEventSeq,
+    currentSnapshotSeq: snapshot.lastEventSeq,
+  };
+}
+
+function getNightActionTypeForActor(
+  actor: Player | undefined,
+): Exclude<NightActionType, "none"> | null {
+  if (actor?.role === "werewolf") {
+    return "werewolf_kill";
+  }
+
+  if (actor?.role === "seer") {
+    return "seer_check";
+  }
+
+  return null;
+}
+
+function isLegalNightTarget(
+  actor: Player,
+  target: Player,
+  snapshot: GameSnapshot,
+): boolean {
+  if (!target.alive || target.playerId === actor.playerId) {
+    return false;
+  }
+
+  if (
+    actor.role === "werewolf" &&
+    snapshot.round.night === 1 &&
+    target.isHuman
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function hasAllNightActorsSubmitted(snapshot: GameSnapshot): boolean {
+  const nightState = snapshot.nightState;
+
+  if (!nightState) {
+    return false;
+  }
+
+  return nightState.requiredActorIds.every((actorId) =>
+    nightState.submittedActorIds.includes(actorId),
+  );
+}
+
+function getCurrentNightSubmissions(
+  events: TruthEvent[],
+  snapshot: GameSnapshot,
+): TruthEvent[] {
+  const submittedActorIds = snapshot.nightState?.submittedActorIds ?? [];
+
+  return submittedActorIds.flatMap((actorId) => {
+    const event = [...events]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.type === "night_action_submitted" &&
+          candidate.phase === "night_action" &&
+          candidate.actorId === actorId,
+      );
+
+    return event ? [event] : [];
+  });
+}
+
+function checkWin(
+  players: Player[],
+): { winner: Player["faction"]; winReason: WinReason } | null {
+  const aliveWerewolves = players.filter(
+    (player) => player.alive && player.role === "werewolf",
+  );
+  const aliveGoodPlayers = players.filter(
+    (player) => player.alive && player.faction === "good_team",
+  );
+
+  if (aliveWerewolves.length === 0) {
+    return {
+      winner: "good_team",
+      winReason: "all_werewolves_dead",
+    };
+  }
+
+  if (aliveWerewolves.length >= aliveGoodPlayers.length) {
+    return {
+      winner: "werewolf_team",
+      winReason: "werewolves_reach_parity",
+    };
+  }
+
+  return null;
 }
 
 function getViewerId(action: GameAction, session: GameSession): string {

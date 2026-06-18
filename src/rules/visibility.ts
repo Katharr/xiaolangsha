@@ -148,12 +148,25 @@ function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] 
     ];
   }
 
-  if (snapshot.gamePhase === "night_action" && snapshot.pendingAction) {
+  if (snapshot.gamePhase === "night_action") {
+    const nightActionType =
+      viewer.role === "werewolf"
+        ? "werewolf_kill"
+        : viewer.role === "seer"
+          ? "seer_check"
+          : null;
+
+    if (!nightActionType) {
+      return [];
+    }
+
     return [
       {
-        actionType: "night_action",
+        actionType: nightActionType,
         actorId: viewer.playerId,
-        legalTargets: snapshot.pendingAction.legalTargets,
+        legalTargets: snapshot.players
+          .filter((player) => isLegalNightTarget(viewer, player, snapshot))
+          .map((player) => player.playerId),
         allowAbstain: false,
         required: true,
       },
@@ -164,5 +177,35 @@ function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] 
 }
 
 function canViewerAct(viewer: Player, snapshot: GameSnapshot): boolean {
+  if (snapshot.gamePhase === "night_action") {
+    return (
+      viewer.alive &&
+      (viewer.role === "werewolf" || viewer.role === "seer") &&
+      Boolean(snapshot.nightState?.requiredActorIds.includes(viewer.playerId)) &&
+      !snapshot.nightState?.resolved &&
+      !snapshot.nightState?.submittedActorIds.includes(viewer.playerId)
+    );
+  }
+
   return snapshot.pendingAction?.actorId === viewer.playerId;
+}
+
+function isLegalNightTarget(
+  viewer: Player,
+  target: Player,
+  snapshot: GameSnapshot,
+): boolean {
+  if (!target.alive || target.playerId === viewer.playerId) {
+    return false;
+  }
+
+  if (
+    viewer.role === "werewolf" &&
+    snapshot.round.night === 1 &&
+    target.isHuman
+  ) {
+    return false;
+  }
+
+  return true;
 }
