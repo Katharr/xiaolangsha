@@ -2,7 +2,13 @@
 
 ## 当前阶段
 
-阶段8已完成，当前进入阶段9：开发与双 Agent 审查。
+阶段8已完成，当前处于阶段9：开发与双 Agent 审查。
+
+阶段9状态校准结论：`S8-SLICE-01 / P9-S01` 工程可运行壳已合并到 `main`，当前可复验证据通过。
+
+`S8-SLICE-02 / P9-S02` 共享模型与错误协议已完成 Developer 实现和 Reviewer 审查。
+
+`S8-SLICE-03 / P9-S03` 开局、补位、身份揭示已完成 Developer 实现和 Reviewer 复审；下一步进入 `S8-SLICE-04 / P9-S04`：首夜与夜晚结算。
 
 ## 已锁定的关键决策
 
@@ -31,8 +37,10 @@
 
 ## 当前待解决问题
 
-1. 阶段9需从 `S8-SLICE-01` 开始，由 Developer Agent 创建工程可运行壳，并提交切片编号、验收编号、验证证据和已知限制。
-2. 每个阶段9切片完成后，必须由 Reviewer Agent 独立审查；缺少验收编号、缺少证据、破坏 `ISO-001`/`ISO-002` 或违反模块边界时必须驳回。
-3. 阶段9执行期间若发现阶段8拆分不足，只允许先生成回溯清单修正阶段8，不得跳过切片直接编码。
-4. `S8-SLICE-12` 通过 Reviewer Agent 后，进入阶段10并触发项目负责人执行 `HITL-001`。
-5. 阶段9普通切片通过后暂不触发 HITL；项目负责人最终确认仍是每个开发阶段正式推进的门禁。
+1. `S8-SLICE-02 / P9-S02` 已完成：新增 `shared` 枚举、核心模型、`GameAction`、`Result`、`AppError`、基础 Zod schema 和 schema 单元测试；引入 `zod` 作为运行时校验依赖。
+2. `S8-SLICE-02 / P9-S02` 仅覆盖 `RULE-008`、`STATE-001`、`AI-002`、`STORE-002`、`STORE-003` 的共享协议/schema 前置部分；重复提交幂等、状态机动作合法性、AI 重试降级、事件重放和恢复失败清空入口仍属于后续切片。
+3. `S8-SLICE-03 / P9-S03` 已完成：新增 `rules` 规则层开局入口，支持标准局/自由局创建、5 人身份补位、真人身份揭示、初始 `TruthEvent`、`GameSnapshot` 和真人 `VisibleInformationSnapshot`；覆盖 `RULE-001`、`RULE-008`、`STATE-001`、`ISO-001`。
+4. `S8-SLICE-03 / P9-S03` 已知限制：仅推进到 `night_action` 前状态，不实现夜晚行动与结算；自由局需先 `create_game` 进入 `role_setup`，再由 `confirm_role_setup` 固定真人身份并补齐 AI；已有对局中重复 `create_game` 已按 `STATE-001` 拒绝。
+5. 下一步任务为 `S8-SLICE-04 / P9-S04`：实现狼人/预言家夜晚动作、首夜禁止刀真人、死亡不亮身份、夜后胜负检查；关联验收编号为 `RULE-002`、`RULE-005`、`RULE-006`、`RULE-007`、`RULE-008`、`ISO-003`、`ISO-004`。
+6. 阶段9后续切片必须继续提交切片编号、验收编号、验证证据、已知限制和 Reviewer 结论；缺少证据、破坏 `ISO-001`/`ISO-002` 或违反模块边界时必须驳回。
+7. `S8-SLICE-12` 通过 Reviewer Agent 后，进入阶段10并触发项目负责人执行 `HITL-001`；阶段9普通切片通过后暂不触发 HITL。
