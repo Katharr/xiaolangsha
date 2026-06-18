@@ -54,6 +54,22 @@
 
 阶段N发现阶段N-1产出矛盾时，只允许回退上一阶段并生成回溯清单。若必须推翻更早阶段的核心决策，应触发重启讨论流程。
 
+提交规则：
+
+- 每次创建 git 提交时，都要把 `data/app-data.json` 的当前数据变更一并纳入提交，保持代码、文档和本地样例/业务数据同步。
+
+推送规则：
+
+- 本项目允许按提交规则把 `data/app-data.json` 的当前真实业务数据随代码一并推送到项目 GitHub 仓库。
+- 如果执行 `git push origin main` 时出现 `Recv failure: Connection was reset`、连接重置或 GitHub 443 端口不稳定，通常原因是 Git 直连 GitHub，没有走本机 Clash Verge/mihomo 代理。
+- 本机 Clash Verge/mihomo 代理监听 `127.0.0.1:7897`；遇到上述网络失败时，使用单次命令代理推送，不改全局 Git 配置：
+
+```powershell
+git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main
+```
+
+- 推送后用 `git status --short --branch` 确认 `main` 与 `origin/main` 已对齐。
+
 ## 锁定与待验证
 
 每个阶段文档必须区分：
