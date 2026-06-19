@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(wc *)",
+      "Bash(ls *)",
+      "Bash(echo *)",
+      "Bash(sed *)",
+      "Bash(rg *)",
+      "Bash(sort *)",
+      "Bash(awk *)",
+      "Bash(find *)",
+      "Bash(true)",
+      "Read(//c/VibeCoding/**)",
+      "Read(//c/vibecoding/**)",
+      "WebSearch",
+      "WebFetch",
+      "Edit",
+      "Write",
+      "Read",
+      "Bash(curl -s -X POST http://127.0.0.1:5177/api/ai/respond -H \"content-type: application/json\" -d '{\"gameId\":\"probe\",\"taskType\":\"review_question\",\"questionText\":\"连通性测试，请用一句话随便回复。\",\"reviewContext\":{}}' --max-time 40)"
+    ]
+  }
+}
