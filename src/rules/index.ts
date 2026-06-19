@@ -19,6 +19,10 @@ import { getBoardConfig } from "./boards";
 import { assignPlayersWithHumanRole, assignStandardPlayers } from "./identity";
 import { buildVisibleInformation } from "./visibility";
 
+export { buildVisibleInformation } from "./visibility";
+export { getBoardConfig, MVP_5P_BOARD_ID } from "./boards";
+export { buildReviewContext } from "./review";
+
 const MAX_DAY_SPEECH_TEXT_LENGTH = 500;
 
 export type RuleEngineContext = {
