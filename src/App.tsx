@@ -33,6 +33,7 @@ type TextConfig = {
 export function App({ store }: AppProps) {
   const ready = useStore(store, (s) => s.ready);
   const busy = useStore(store, (s) => s.busy);
+  const thinking = useStore(store, (s) => s.thinking);
   const phase = useStore(store, (s) => s.phase);
   const participation = useStore(store, (s) => s.participation);
   const vi = useStore(store, (s) => s.visibleInformation);
@@ -129,7 +130,7 @@ export function App({ store }: AppProps) {
             askReview={(question) => store.getState().askReview(question)}
           />
         ) : (
-          <MessageStream messages={messages} />
+          <MessageStream messages={messages} thinking={thinking} />
         )}
       </main>
 

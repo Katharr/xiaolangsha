@@ -204,6 +204,7 @@ function confirmRoleSetup(
       gameId: context.session.gameId,
       humanPlayerId: action.playerId,
       humanRole: action.selectedRole,
+      seed: action.idempotencyKey,
     });
   } catch {
     return rulesError("INVALID_ACTION", "Selected role cannot be assigned.");
@@ -796,6 +797,7 @@ function confirmDayAnnouncement(
         deadPlayerIds: context.snapshot.nightState?.deathPlayerIds ?? [],
         announcementText: buildDayAnnouncementText(
           context.snapshot.nightState?.deathPlayerIds ?? [],
+          context.snapshot.players,
         ),
       },
       idempotencyKey: action.idempotencyKey,
@@ -2121,6 +2123,7 @@ function buildRoleAssignmentEvents(params: {
       payload: {
         players: params.players.map((player) => ({
           playerId: player.playerId,
+          name: player.name,
           seat: player.seat,
           controller: player.controller,
           role: player.role,
@@ -2329,12 +2332,20 @@ function getAlivePlayerIdsBySeat(snapshot: GameSnapshot): string[] {
     .map((player) => player.playerId);
 }
 
-function buildDayAnnouncementText(deadPlayerIds: string[]): string {
+function buildDayAnnouncementText(
+  deadPlayerIds: string[],
+  players: Player[],
+): string {
   if (deadPlayerIds.length === 0) {
     return "天亮了，昨夜平安夜。";
   }
 
-  return `天亮了，昨夜 ${deadPlayerIds.join("、")} 死亡，身份不公开。`;
+  const label = (id: string): string => {
+    const player = players.find((candidate) => candidate.playerId === id);
+    return player ? `${player.name}（${player.seat}号）` : id;
+  };
+
+  return `天亮了，昨夜 ${deadPlayerIds.map(label).join("、")} 死亡，身份不公开。`;
 }
 
 function checkWin(

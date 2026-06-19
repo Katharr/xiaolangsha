@@ -31,3 +31,12 @@ export const WIN_REASON_LABEL: Record<WinReason, string> = {
   all_werewolves_dead: "屠尽所有狼人",
   werewolves_reach_parity: "狼人达到人数优势",
 };
+
+/** AI 思考指示器里展示的任务文案（按 driver 的 InGameTaskType）。 */
+export const TASK_THINKING_LABEL: Record<string, string> = {
+  night_action: "夜晚行动",
+  speech: "发言",
+  vote: "投票",
+  tie_speech: "拉票发言",
+  last_words: "遗言",
+};

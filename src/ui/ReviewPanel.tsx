@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { GameAction, Player, Result, ReviewContext } from "../shared";
+import { toUserMessage } from "../store";
 
 import { FACTION_LABEL, ROLE_LABEL, WIN_REASON_LABEL } from "./labels";
 import { TextInput } from "./TextInput";
@@ -31,16 +32,16 @@ export function ReviewPanel({
   const [qaLog, setQaLog] = useState<QaEntry[]>([]);
   const [qaId, setQaId] = useState(0);
 
-  const seatOf = (id: string): number | string =>
-    reviewContext.players.find((p) => p.playerId === id)?.seat ?? "?";
+  const labelOf = (id: string): string => {
+    const player = reviewContext.players.find((p) => p.playerId === id);
+    return player ? `${player.name}（${player.seat}号）` : "某玩家";
+  };
 
   const sortedPlayers = [...reviewContext.players].sort((a, b) => a.seat - b.seat);
 
   const handleAsk = async (question: string): Promise<boolean> => {
     const result = await askReview(question);
-    const answer = result.ok
-      ? result.data
-      : (result.error.userMessage ?? "追问失败。");
+    const answer = result.ok ? result.data : toUserMessage(result.error);
     const id = qaId + 1;
     setQaId(id);
     setQaLog((log) => [...log, { id, question, answer }]);
@@ -61,7 +62,7 @@ export function ReviewPanel({
         <ul className="review-list">
           {sortedPlayers.map((player: Player) => (
             <li key={player.playerId}>
-              {player.seat}号 {player.controller === "human" ? "你" : "AI"} ·{" "}
+              {player.name}（{player.seat}号）{player.isHuman ? "·你" : ""} ·{" "}
               {ROLE_LABEL[player.role]} · {FACTION_LABEL[player.faction]} ·{" "}
               {player.alive ? "存活" : "出局"}
             </li>
@@ -85,8 +86,8 @@ export function ReviewPanel({
                     : "";
               return (
                 <li key={night.eventId}>
-                  第 {night.night} 夜：{seatOf(night.actorId)}号 {verb}{" "}
-                  {night.targetId ? `${seatOf(night.targetId)}号` : "（无目标）"}
+                  第 {night.night} 夜：{labelOf(night.actorId)} {verb}{" "}
+                  {night.targetId ? labelOf(night.targetId) : "（无目标）"}
                   {faction}
                 </li>
               );
@@ -105,10 +106,12 @@ export function ReviewPanel({
               <li key={vote.eventId}>
                 第 {vote.day} 天
                 {vote.voteRound === "tie_break" ? "（二次）" : ""}：
-                {seatOf(vote.voterId)}号 →{" "}
+                {labelOf(vote.voterId)} →{" "}
                 {vote.choiceType === "abstain"
                   ? "弃票"
-                  : `${vote.targetId ? seatOf(vote.targetId) : "?"}号`}
+                  : vote.targetId
+                    ? labelOf(vote.targetId)
+                    : "（无）"}
               </li>
             ))}
           </ul>
@@ -130,7 +133,7 @@ export function ReviewPanel({
                     : "";
               return (
                 <li key={speech.eventId}>
-                  第 {speech.day} 天 {seatOf(speech.speakerId)}号：{tag}
+                  第 {speech.day} 天 {labelOf(speech.speakerId)}：{tag}
                   {speech.text}
                 </li>
               );

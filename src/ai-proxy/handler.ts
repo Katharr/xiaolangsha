@@ -98,9 +98,10 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
 
   return {
     system: [
-      "你正在玩一局 5 人狼人杀（1 狼人、1 预言家、3 村民）。你是其中一名 AI 玩家。",
-      `你的座位：${vi.ownSeat} 号；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
-      "重要：你只能依据下面提供的「可见信息」做判断，绝不能假设你知道其他玩家的真实身份。",
+      "你正在玩一局 5 人狼人杀（1 狼人、1 预言家、3 村民）。",
+      `你叫「${vi.ownName}」，坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
+      "所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
+      "重要：你只能依据下面提供的「可见信息」做判断，绝不能假设你知道其他玩家的真实身份，也不要凭空怀疑或针对某位玩家——只根据其发言与行为的逻辑来推理。",
       taskInstruction(req.taskType, vi),
       OUTPUT_CONTRACT,
     ].join("\n"),

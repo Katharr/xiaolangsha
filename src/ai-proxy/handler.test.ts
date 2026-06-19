@@ -15,6 +15,7 @@ function fakeVi(
     gamePhase: "vote",
     round: { night: 1, day: 1, voteRound: "first" },
     ownSeat: 2,
+    ownName: "阿杰",
     ownRole: "villager",
     ownFaction: "good_team",
     alivePlayers: [],

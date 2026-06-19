@@ -32,6 +32,7 @@ export function buildVisibleInformation(
       : undefined,
     round: snapshot.round,
     ownSeat: viewer.seat,
+    ownName: viewer.name,
     ownRole: viewer.role,
     ownFaction: viewer.faction,
     alivePlayers: snapshot.players
@@ -56,8 +57,8 @@ export function buildVisibleInformation(
 function toPublicPlayerRef(player: Player): PublicPlayerRef {
   return {
     playerId: player.playerId,
+    name: player.name,
     seat: player.seat,
-    controller: player.controller,
     alive: player.alive,
     ...(player.isRoleVisiblePublicly ? { publicRole: player.role } : {}),
   };
@@ -66,6 +67,7 @@ function toPublicPlayerRef(player: Player): PublicPlayerRef {
 function toPublicDeathRef(player: Player): PublicDeathRef {
   return {
     playerId: player.playerId,
+    name: player.name,
     seat: player.seat,
     deathCause: player.deathCause ?? "night_kill",
     round: { night: 0, day: 0, voteRound: "none" },

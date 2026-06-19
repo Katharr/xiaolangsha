@@ -244,6 +244,11 @@ export type DriverOptions = {
   /** 固定字符串（测试用确定性 now）或每步取一次的时钟函数（真实运行）。 */
   now: string | (() => string);
   onStep?: (state: DriverState) => void | Promise<void>;
+  /** 在调用某个 AI 的 `respond` 之前触发，供 UI 显示「谁在思考」。 */
+  onActorThinking?: (info: {
+    actorId: string;
+    taskType: InGameTaskType;
+  }) => void;
   /** 防御性步数上限，避免规则/AI 异常造成死循环。 */
   maxSteps?: number;
 };
@@ -287,6 +292,10 @@ export async function runAiDriver(
         visibleInformation,
         state.snapshot.gameId,
       );
+      options.onActorThinking?.({
+        actorId: step.actorId,
+        taskType: step.taskType,
+      });
       const response = await options.ai.respond(request);
       if (!response.ok) {
         // withFallback 应保证有兜底；万一仍失败，停下避免死循环。

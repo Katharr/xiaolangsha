@@ -25,9 +25,16 @@ import type {
   VisibleInformationSnapshot,
 } from "../shared";
 
-import type { DriverState } from "./driver";
+import type { DriverState, InGameTaskType } from "./driver";
 import { runAiDriver } from "./driver";
 import { deriveMessages, type ChatMessage } from "./messages";
+
+/** 当前正在「思考」的 AI 行动者（供 UI 显示打字指示）。无人思考时为 null。 */
+export type ThinkingState = {
+  name: string;
+  seat: number;
+  taskType: InGameTaskType;
+};
 
 export type GameStoreDeps = {
   ai: AiClient;
@@ -41,6 +48,8 @@ export type GameStoreState = {
   ready: boolean;
   /** 正在处理动作 / AI 思考中——UI 据此禁用输入。 */
   busy: boolean;
+  /** 当前正在思考的 AI 行动者；UI 据此显示「XX 正在思考…」打字气泡。 */
+  thinking: ThinkingState | null;
   session: GameSession | null;
   snapshot: GameSnapshot | null;
   events: TruthEvent[];
@@ -138,12 +147,23 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         humanPlayerId: state.session.humanPlayerId,
         now: nowProvider,
         onStep: commit,
+        onActorThinking: ({ actorId, taskType }) => {
+          const player = get().snapshot?.players.find(
+            (candidate) => candidate.playerId === actorId,
+          );
+          set({
+            thinking: player
+              ? { name: player.name, seat: player.seat, taskType }
+              : null,
+          });
+        },
       });
     };
 
     return {
       ready: false,
       busy: false,
+      thinking: null,
       session: null,
       snapshot: null,
       events: [],
@@ -158,7 +178,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         set({ busy: true, lastError: null });
         const recovered = await recoverGame(db);
         if (!recovered.ok) {
-          set({ busy: false, ready: true, lastError: recovered.error });
+          set({ busy: false, thinking: null, ready: true, lastError: recovered.error });
           return;
         }
 
@@ -175,7 +195,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
           await commit(state);
         }
 
-        set({ busy: false, ready: true });
+        set({ busy: false, thinking: null, ready: true });
       },
 
       dispatch: async (action: GameAction) => {
@@ -190,6 +210,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         if (!result.ok) {
           set({
             busy: false,
+            thinking: null,
             lastError: result.error,
             messages: deriveMessages(get().visibleInformation, result.error),
           });
@@ -208,6 +229,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
             visibleInformation: null,
             messages: [],
             busy: false,
+            thinking: null,
             lastError: null,
             phase: success.snapshot.gamePhase,
             participation: success.snapshot.humanParticipationState,
@@ -228,7 +250,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         await commit(state);
         state = await drive(state);
         await commit(state);
-        set({ busy: false });
+        set({ busy: false, thinking: null });
       },
 
       askReview: async (question: string): Promise<Result<string>> => {

@@ -70,6 +70,25 @@ function playerIdByRole(snapshot: GameSnapshot, role: Role): string {
   return player.playerId;
 }
 
+/** 存活玩家按座位排序后的 id 列表（座位现已随机，引擎按座位定顺序）。 */
+function aliveIdsBySeat(snapshot: GameSnapshot): string[] {
+  return [...snapshot.players]
+    .filter((player) => player.alive)
+    .sort((left, right) => left.seat - right.seat)
+    .map((player) => player.playerId);
+}
+
+/** 给定一组 id，按它们在快照里的座位排序（用于校验候选/发言顺序）。 */
+function idsBySeat(snapshot: GameSnapshot, ids: string[]): string[] {
+  return ids
+    .map((id) => ({
+      id,
+      seat: snapshot.players.find((p) => p.playerId === id)?.seat ?? 0,
+    }))
+    .sort((a, b) => a.seat - b.seat)
+    .map((entry) => entry.id);
+}
+
 function expectNoRoleLeakInPayloads(events: TruthEvent[]) {
   const payloadText = JSON.stringify(events.map((event) => event.payload));
 
@@ -214,12 +233,14 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     expect(state.snapshot.gamePhase).toBe("vote");
     expect(state.snapshot.pendingAction).toBeNull();
     expect(state.snapshot.round.voteRound).toBe("first");
+    const voters = aliveIdsBySeat(state.snapshot);
+    expect(voters.sort()).toEqual(["ai-1", "ai-2", "ai-4", "human-1"]);
     expect(state.snapshot.voteState).toEqual({
       day: 1,
       voteRound: "first",
-      eligibleVoterIds: ["human-1", "ai-1", "ai-2", "ai-4"],
+      eligibleVoterIds: aliveIdsBySeat(state.snapshot),
       submittedVoterIds: [],
-      candidateIds: ["human-1", "ai-1", "ai-2", "ai-4"],
+      candidateIds: aliveIdsBySeat(state.snapshot),
       allowAbstain: true,
       resolved: false,
     });
@@ -230,11 +251,14 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     const humanView = buildVisibleInformation(humanPlayerId, state.snapshot, state.events);
 
     expect(humanView.canAct).toBe(true);
+    const humanTargets = aliveIdsBySeat(state.snapshot).filter(
+      (id) => id !== humanPlayerId,
+    );
     expect(humanView.legalActions).toEqual([
       {
         actionType: "vote",
         actorId: humanPlayerId,
-        legalTargets: ["ai-1", "ai-2", "ai-4"],
+        legalTargets: humanTargets,
         allowAbstain: true,
         required: true,
       },
@@ -415,16 +439,17 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       tally: { "ai-1": 2, "ai-2": 2 },
     });
     expect(tied.snapshot.gamePhase).toBe("tie_speech");
+    const tieSpeakers = idsBySeat(tied.snapshot, ["ai-1", "ai-2"]);
     expect(tied.snapshot.speechState).toEqual({
       day: 1,
       speechKind: "tie_speech",
-      speakerOrder: ["ai-1", "ai-2"],
-      currentSpeakerId: "ai-1",
+      speakerOrder: tieSpeakers,
+      currentSpeakerId: tieSpeakers[0],
       completedSpeakerIds: [],
     });
     expect(tied.snapshot.pendingAction).toEqual({
       type: "tie_speech",
-      actorId: "ai-1",
+      actorId: tieSpeakers[0],
       legalTargets: [],
       allowAbstain: false,
     });
@@ -435,19 +460,19 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       expectOk(
         apply(state, {
           type: "submit_tie_speech",
-          idempotencyKey: "tie-speech-ai1",
-          speakerId: "ai-1",
+          idempotencyKey: "tie-speech-1",
+          speakerId: tieSpeakers[0],
           text: "Vote me and you lose a good man.",
         }),
       ),
     );
-    expect(state.snapshot.pendingAction?.actorId).toBe("ai-2");
+    expect(state.snapshot.pendingAction?.actorId).toBe(tieSpeakers[1]);
 
     const tieVoteReady = expectOk(
       apply(state, {
         type: "submit_tie_speech",
-        idempotencyKey: "tie-speech-ai2",
-        speakerId: "ai-2",
+        idempotencyKey: "tie-speech-2",
+        speakerId: tieSpeakers[1],
         text: "No, vote the other one.",
       }),
     );
@@ -461,9 +486,9 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     expect(tieVoteReady.snapshot.voteState).toEqual({
       day: 1,
       voteRound: "tie_break",
-      eligibleVoterIds: ["human-1", "ai-1", "ai-2", "ai-4"],
+      eligibleVoterIds: aliveIdsBySeat(tieVoteReady.snapshot),
       submittedVoterIds: [],
-      candidateIds: ["ai-1", "ai-2"],
+      candidateIds: tieSpeakers,
       allowAbstain: true,
       resolved: false,
     });
@@ -493,13 +518,14 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
 
     expect(state.snapshot.gamePhase).toBe("tie_speech");
 
+    const tie2Speakers = state.snapshot.speechState?.speakerOrder ?? [];
     state = appendState(
       state,
       expectOk(
         apply(state, {
           type: "submit_tie_speech",
-          idempotencyKey: "tie2-speech-ai1",
-          speakerId: "ai-1",
+          idempotencyKey: "tie2-speech-1",
+          speakerId: tie2Speakers[0],
           text: "Defending myself.",
         }),
       ),
@@ -509,8 +535,8 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       expectOk(
         apply(state, {
           type: "submit_tie_speech",
-          idempotencyKey: "tie2-speech-ai2",
-          speakerId: "ai-2",
+          idempotencyKey: "tie2-speech-2",
+          speakerId: tie2Speakers[1],
           text: "Defending myself too.",
         }),
       ),
@@ -636,11 +662,17 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
 
     expect(state.snapshot.gamePhase).toBe("tie_speech");
 
+    const currentSpeaker = state.snapshot.speechState?.currentSpeakerId ?? "";
+    const waitingSpeaker =
+      state.snapshot.speechState?.speakerOrder.find(
+        (id) => id !== currentSpeaker,
+      ) ?? "";
+
     expectErrorCode(
       apply(state, {
         type: "submit_tie_speech",
         idempotencyKey: "bad-tie-empty",
-        speakerId: "ai-1",
+        speakerId: currentSpeaker,
         text: "   ",
       }),
       "INVALID_ACTION",
@@ -649,7 +681,7 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       apply(state, {
         type: "submit_tie_speech",
         idempotencyKey: "bad-tie-long",
-        speakerId: "ai-1",
+        speakerId: currentSpeaker,
         text: "x".repeat(501),
       }),
       "INVALID_ACTION",
@@ -659,7 +691,7 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       apply(state, {
         type: "submit_tie_speech",
         idempotencyKey: "bad-tie-turn",
-        speakerId: "ai-2",
+        speakerId: waitingSpeaker,
         text: "Not my turn yet.",
       }),
       "ACTION_NOT_ALLOWED",

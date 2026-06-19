@@ -46,11 +46,11 @@ export function ActionArea({
     setSelectedTarget(null);
   }, [phase, vi?.generatedAtSeq]);
 
-  const seatOf = (id: string): number | string => {
+  const labelOf = (id: string): string => {
     const found =
       vi?.alivePlayers.find((p) => p.playerId === id) ??
       vi?.deadPlayers.find((p) => p.playerId === id);
-    return found ? found.seat : "?";
+    return found ? `${found.name}（${found.seat}号）` : "某玩家";
   };
 
   const targetButtons = (targets: string[]) => (
@@ -63,7 +63,7 @@ export function ActionArea({
           disabled={busy}
           onClick={() => setSelectedTarget(id)}
         >
-          {seatOf(id)}号
+          {labelOf(id)}
         </button>
       ))}
     </div>

@@ -52,6 +52,8 @@ export type BoardConfig = {
 export type Player = {
   playerId: string;
   gameId: string;
+  /** 展示用昵称（含真人）；局中以「名字（N号）」称呼，不泄露 human/ai 身份。 */
+  name: string;
   seat: number;
   controller: PlayerController;
   role: Role;
@@ -152,14 +154,16 @@ export type GameSnapshot = {
 
 export type PublicPlayerRef = {
   playerId: string;
+  /** 展示用昵称。注意：刻意不含 controller，AI 据此无法区分真人/AI（ISO-001）。 */
+  name: string;
   seat: number;
-  controller: PlayerController;
   alive: boolean;
   publicRole?: Role;
 };
 
 export type PublicDeathRef = {
   playerId: string;
+  name: string;
   seat: number;
   deathCause: DeathCause;
   round: RoundRef;
@@ -210,6 +214,7 @@ export type VisibleInformationSnapshot = {
   humanParticipationState?: HumanParticipationState;
   round: RoundState;
   ownSeat: number;
+  ownName: string;
   ownRole: Role;
   ownFaction: Faction;
   alivePlayers: PublicPlayerRef[];

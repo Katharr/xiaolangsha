@@ -5,6 +5,8 @@ import type {
   VisibleInformationSnapshot,
 } from "../shared";
 
+import { toUserMessage } from "./errorMessages";
+
 /**
  * 聊天流消息种类。messages 只从 visibleInformation（+ 最近一次 AppError）派生，
  * 组件物理上拿不到 snapshot/events（ISO-001）。
@@ -22,6 +24,10 @@ export type ChatMessage = {
   kind: ChatMessageKind;
   text: string;
   speakerId?: string;
+  /** 发言者展示名「名字（N号）」，供 UI 渲染气泡头部（speech 类消息用）。 */
+  speakerLabel?: string;
+  /** 发言者座位号，供 UI 取头像配色（speech 类消息用）。 */
+  speakerSeat?: number;
   /** 该消息是否出自当前 viewer 自己（UI 用于右对齐等）。 */
   self?: boolean;
 };
@@ -39,7 +45,7 @@ export function deriveMessages(
   }
 
   const vi = visibleInformation;
-  const seatById = buildSeatLookup(vi);
+  const meta = buildPlayerMeta(vi);
   const byEventId = new Map<string, VisibleEventRef>();
   for (const event of [...vi.publicEvents, ...vi.privateEvents]) {
     byEventId.set(event.eventId, event);
@@ -48,7 +54,7 @@ export function deriveMessages(
 
   const messages: ChatMessage[] = [];
   for (const event of ordered) {
-    const message = mapEvent(event, vi, seatById);
+    const message = mapEvent(event, vi, meta);
     if (message) {
       messages.push(message);
     }
@@ -64,10 +70,10 @@ export function deriveMessages(
 function mapEvent(
   event: VisibleEventRef,
   vi: VisibleInformationSnapshot,
-  seatById: Map<string, number>,
+  meta: Map<string, PlayerMeta>,
 ): ChatMessage | null {
-  const seatOf = (id: unknown) =>
-    typeof id === "string" ? (seatById.get(id) ?? "?") : "?";
+  const labelOf = (id: unknown) =>
+    typeof id === "string" ? (meta.get(id)?.label ?? "某玩家") : "某玩家";
 
   switch (event.type) {
     case "day_announced": {
@@ -94,8 +100,10 @@ function mapEvent(
         seq: event.seq,
         kind: "speech",
         speakerId,
+        speakerLabel: labelOf(speakerId),
+        speakerSeat: meta.get(speakerId)?.seat,
         self: speakerId === vi.viewerId,
-        text: `${seatOf(speakerId)}号：${prefix}${text}`,
+        text: `${prefix}${text}`,
       };
     }
 
@@ -104,7 +112,7 @@ function mapEvent(
         id: event.eventId,
         seq: event.seq,
         kind: "vote_result",
-        text: formatVoteResult(event, seatById),
+        text: formatVoteResult(event, meta),
       };
     }
 
@@ -115,7 +123,7 @@ function mapEvent(
         id: event.eventId,
         seq: event.seq,
         kind: "host",
-        text: `${seatOf(event.payload.playerId)}号 ${cause}。`,
+        text: `${labelOf(event.payload.playerId)} ${cause}。`,
       };
     }
 
@@ -130,7 +138,7 @@ function mapEvent(
           id: event.eventId,
           seq: event.seq,
           kind: "private_info",
-          text: `[仅你可见] 你查验了 ${seatOf(result.targetId)}号，结果为：${faction}。`,
+          text: `[仅你可见] 你查验了 ${labelOf(result.targetId)}，结果为：${faction}。`,
         };
       }
       return null;
@@ -161,32 +169,41 @@ function mapEvent(
 
 function formatVoteResult(
   event: VisibleEventRef,
-  seatById: Map<string, number>,
+  meta: Map<string, PlayerMeta>,
 ): string {
+  const labelOf = (id: string) => meta.get(id)?.label ?? "某玩家";
   const tally = event.payload.tally as Record<string, unknown> | undefined;
   const exiledPlayerId = event.payload.exiledPlayerId;
   const parts: string[] = [];
   if (tally) {
     for (const [playerId, count] of Object.entries(tally)) {
-      parts.push(`${seatById.get(playerId) ?? "?"}号 ${Number(count)}票`);
+      parts.push(`${labelOf(playerId)} ${Number(count)}票`);
     }
   }
   const tallyText = parts.length > 0 ? `（${parts.join("，")}）` : "";
   if (typeof exiledPlayerId === "string") {
-    return `投票结果：${seatById.get(exiledPlayerId) ?? "?"}号 被放逐。${tallyText}`;
+    return `投票结果：${labelOf(exiledPlayerId)} 被放逐。${tallyText}`;
   }
   return `投票结果：无人被放逐。${tallyText}`;
 }
 
-function buildSeatLookup(vi: VisibleInformationSnapshot): Map<string, number> {
-  const seatById = new Map<string, number>();
+type PlayerMeta = { seat: number; name: string; label: string };
+
+/** 把可见信息里的玩家映射成 id → {座位, 名字, 「名字（N号）」标签}。 */
+function buildPlayerMeta(
+  vi: VisibleInformationSnapshot,
+): Map<string, PlayerMeta> {
+  const meta = new Map<string, PlayerMeta>();
+  const put = (playerId: string, name: string, seat: number) => {
+    meta.set(playerId, { seat, name, label: `${name}（${seat}号）` });
+  };
   for (const player of vi.alivePlayers) {
-    seatById.set(player.playerId, player.seat);
+    put(player.playerId, player.name, player.seat);
   }
   for (const player of vi.deadPlayers) {
-    seatById.set(player.playerId, player.seat);
+    put(player.playerId, player.name, player.seat);
   }
-  return seatById;
+  return meta;
 }
 
 function errorMessage(error: AppError, seq: number): ChatMessage {
@@ -194,6 +211,6 @@ function errorMessage(error: AppError, seq: number): ChatMessage {
     id: `error-${seq}-${error.code}`,
     seq: seq + 0.5,
     kind: "system",
-    text: error.userMessage ?? error.message,
+    text: toUserMessage(error),
   };
 }

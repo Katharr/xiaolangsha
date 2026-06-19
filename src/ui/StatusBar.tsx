@@ -12,7 +12,7 @@ type StatusBarProps = {
   vi: VisibleInformationSnapshot | null;
 };
 
-type SeatRow = { seat: number; isViewer: boolean; alive: boolean };
+type SeatRow = { seat: number; name: string; isViewer: boolean; alive: boolean };
 
 /**
  * 顶部状态栏：相位 / 轮次 / 真人自己的身份 / 玩家存活简表。
@@ -35,11 +35,13 @@ export function StatusBar({ phase, participation, vi }: StatusBarProps) {
   const rows: SeatRow[] = [
     ...vi.alivePlayers.map((player) => ({
       seat: player.seat,
+      name: player.name,
       isViewer: player.playerId === vi.viewerId,
       alive: true,
     })),
     ...vi.deadPlayers.map((player) => ({
       seat: player.seat,
+      name: player.name,
       isViewer: player.playerId === vi.viewerId,
       alive: false,
     })),
@@ -61,7 +63,8 @@ export function StatusBar({ phase, participation, vi }: StatusBarProps) {
             key={row.seat}
             className={row.alive ? "seat-alive" : "seat-dead"}
           >
-            {row.seat}号 {row.isViewer ? "你" : "AI"} {row.alive ? "存活" : "死亡"}
+            {row.name}（{row.seat}号）{row.isViewer ? "·你" : ""}{" "}
+            {row.alive ? "存活" : "出局"}
           </li>
         ))}
       </ul>

@@ -175,6 +175,7 @@ export const eventVisibilitySchema = z.object({
 export const playerSchema = z.object({
   playerId: nonEmptyString,
   gameId: nonEmptyString,
+  name: nonEmptyString,
   seat: z.number().int().positive(),
   controller: playerControllerSchema,
   role: roleSchema,
@@ -203,14 +204,15 @@ export const truthEventSchema = z.object({
 
 export const publicPlayerRefSchema = z.object({
   playerId: nonEmptyString,
+  name: nonEmptyString,
   seat: z.number().int().positive(),
-  controller: playerControllerSchema,
   alive: z.boolean(),
   publicRole: roleSchema.optional(),
 });
 
 export const publicDeathRefSchema = z.object({
   playerId: nonEmptyString,
+  name: nonEmptyString,
   seat: z.number().int().positive(),
   deathCause: deathCauseSchema,
   round: roundRefSchema,
@@ -311,6 +313,7 @@ export const visibleInformationSnapshotSchema = z.object({
   humanParticipationState: humanParticipationStateSchema.optional(),
   round: roundStateSchema,
   ownSeat: z.number().int().positive(),
+  ownName: nonEmptyString,
   ownRole: roleSchema,
   ownFaction: factionSchema,
   alivePlayers: z.array(publicPlayerRefSchema),
