@@ -1,6 +1,6 @@
 # CLAUDE.md — 小狼杀（langrensha / xiaolangsha）
 
-> **这是会话交接文档。新会话请先读完本文件，再读 `docs/BUILD-PLAN.md`（含 M1 逐函数详细设计），然后从「M0 收尾 + M1」开始按计划实现。**
+> **这是会话交接文档。新会话请先读完本文件（重点看下方「## 现状基线」的最新进度），再按需读 `docs/BUILD-PLAN.md`。M1–M6 与「阶段二重构（顺序夜晚+预女猎+屠边）」均已完成，当前在 M7：手测交付 + 打磨。**
 
 ## 这个项目是什么
 
@@ -32,10 +32,18 @@
 
 **AI 契约**：AI 输入只给 `VisibleInformationSnapshot`+taskType；输出 JSON `{text?, targetId?, choiceType?, actionType?, analysisSummary?, decisionSummary?}`（后两者只进 metadata 不在局中显示）。`AiClient.respond(req): Promise<Result<AiTaskPayload>>` 是脚本AI↔LLM 的唯一切换接缝；`withFallback(httpAi, scriptedAi)` 实现失败降级。
 
-## 现状基线
+## 现状基线（2026-06-20 更新）
 
-- `npm test` → 5 文件 **32 用例全绿**；`npm run build`（tsc+vite）通过。
-- 未提交 WIP 已把 `submitSpeech` 的 `day_speech→vote` 转换 + `getViewerIdForEvent`/`getViewerId` 的 vote/tie/last-words viewer 解析就位；**真正的投票处理器还没有**（M1 要加）。
+- **基线绿**：`npx tsc -b` 通过；`npm test` → **16 文件 112 用例全绿**；`npm run build`（tsc+vite）通过。
+- **已完成（全部提交在 `main`，最新 commit `e5956e9`）**：
+  - M1–M6 全部完成（投票/平票/放逐/遗言、快进+复盘、Dexie 持久化、ai-client 接缝+脚本兜底+Zustand store+driver、ai-proxy Vite 中间件+httpAi+`.env.example`、聊天室 UI）。
+  - **阶段二大重构完成**（顺序夜晚 + 主流神职预女猎 + 屠边胜负 + 夜晚信息隔离）：见 commit `07fdba2`（夜晚匿名化止血）、`b6ad726`（规则层）、`e5956e9`（2.8 UI）。
+- **当前默认板 = 7 人标准局 `STANDARD_7P_BOARD`**（2狼+2民+预言家+女巫+猎人，屠边）。旧 5 人板 `mvp_5p_*` 仅留作回归测试。
+- **下一步 = M7 手测交付**：
+  1. 填好项目 `.env`（参照 `.env.example`，不要碰 `C:/vibecoding/auth.json`）。
+  2. `npm run dev` → 开 7 人标准局，验证：夜晚只见「天黑请闭眼」无姓名泄漏；真人当女巫（救X/毒谁/放弃）、猎人（开枪/不开枪）、守卫、狼时控件可用；玩到屠边结束看复盘真相。
+  3. 降级测试：故意填错 key → 脚本兜底应能全程跑完到复盘不卡死。
+  4. 刷新恢复（Dexie）、e2e 冒烟、UI 打磨。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 
