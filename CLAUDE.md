@@ -1,0 +1,63 @@
+# CLAUDE.md — 小狼杀（langrensha / xiaolangsha）
+
+> **这是会话交接文档。新会话请先读完本文件，再读 `docs/BUILD-PLAN.md`（含 M1 逐函数详细设计），然后从「M0 收尾 + M1」开始按计划实现。**
+
+## 这个项目是什么
+
+单人网页版 **AI 狼人杀**。Vite + React 19 + TypeScript + Zod。`package.json` 里 name 是 `xiaolangsha`，文件夹叫 `langrensha`。
+
+原本由 Codex 用一套极重的「10 阶段 + 双 Agent 审查 + 驳回单 + HITL 门禁」流程推进，结果**文档严重过度工程，但实际能玩的东西为零**（UI 只是 13 行的占位壳子，显示"工程壳已就绪"）。
+
+**当前目标**：保留 Codex 唯一做对的东西（带测试的事件溯源规则引擎），**丢掉那套官僚流程**，按务实的「构建→测试→迭代」节奏，做出**第一版打开浏览器就能和真 LLM（gpt-5.5）对话、从开局玩到复盘**的可玩 MVP。
+
+## 工作方式（重要）
+
+- **去官僚化**：不要执行 Codex 的「阶段推进/驳回单/通过单/双 Agent 审查/HITL」仪式。那套过度工程的流程文档（`Agent.md`/`Skill.md`/`docs/phase-1..8`/`ProjectStatus.md`/`docs/archive`）已删除。唯一保留的旧设计参考是 `docs/phase-5-5-chatroom-mvp-frontend-design.md`（M6 聊天室 UI 布局参照）。「模块边界红线」见下方「可复用核心架构」，已是权威。
+- 在分支 `build/mvp-playable` 上工作，按里程碑提交，每个里程碑以「测试绿 或 浏览器能点」为完成标准。
+
+## 已锁定的决策
+
+1. **第一版即接真 LLM 对话**（游戏核心）。脚本AI 照做，但只作为 LLM 调用失败时的**降级兜底**（设计本就要求：AI 失败→重试一次→降级到安全模板/随机合法动作）。
+2. AI 用 **OpenAI 兼容**第三方 endpoint，模型 **`gpt-5.5`**。
+3. **凭证由用户自己填项目 `.env`**（进 `.gitignore`，只在服务端代理进程读取，绝不进浏览器/git）。只提供 `.env.example` 模板；不替用户填、**不要碰 `C:/vibecoding/auth.json`（那是 Codex 的 key）**。
+   - 现有参考（用户可能复用）：`C:/vibecoding/config.toml` 里 `base_url=https://fuck-clau.de/v1`、`wire_api="responses"`、`model=gpt-5.5`。代理默认走 chat completions，加 `AI_WIRE_API=chat|responses` 开关备用。
+
+## 可复用核心架构（保留，勿重写）
+
+**数据模型三层**（`src/shared/models.ts`）：`TruthEvent`（权威事实源，append-only）→ `GameSnapshot`（派生缓存）→ `VisibleInformationSnapshot`（每 viewer 的信息隔离视图）。枚举 `enums.ts`，`GameAction` `actions.ts`，`Result/AppError` `result.ts`，Zod schema `schemas.ts`（**AI 契约 `aiTaskRequestSchema/aiTaskPayloadSchema/aiTaskResponseSchema` 已写好可直接用**）。
+
+**规则引擎唯一入口**：`src/rules/index.ts` 的 `applyAction(action, {session?, snapshot?, events?, now}): Result<{session, events, snapshot, visibleInformation, nextPendingAction?}>`。已实现 create_game→confirm_role_setup→confirm_role_reveal→submit_night_action(+resolveNight)→confirm_day_announcement→submit_speech。每次状态变更走 `buildEvent`+`buildEventId(=${gameId}-${seq}-${type})`，幂等靠 `metadata.idempotencyKey`（重复键→no-op）。`checkWin(players)`(index.ts:1392) 可复用。信息隔离在 `visibility.ts` 的 `buildVisibleInformation`。单板 `mvp_5p_wolf_seer_3villagers`（1狼1预言家3民，1真人+4AI；`allowSelfVote:false, allowAbstainVote:true, maxTieRounds:1, exileLastWords:true, nightDeathLastWords:false`）。
+
+**模块边界红线**（必须遵守）：`shared`←`rules`（rules 只依赖 shared，不碰 UI/storage/AI/React）；`storage` 只持久化；`ai-client` 不持 key、只见 `VisibleInformationSnapshot`；`ai-proxy` 持 key 调 LLM；`store` 只编排不手写 `TruthEvent`；`ui` 只读 `VisibleInformationSnapshot`（**ISO-001 红线**）。完整真相只能在 `review` 阶段经 `buildReviewContext` 组装（**ISO-002 红线**）。
+
+**AI 契约**：AI 输入只给 `VisibleInformationSnapshot`+taskType；输出 JSON `{text?, targetId?, choiceType?, actionType?, analysisSummary?, decisionSummary?}`（后两者只进 metadata 不在局中显示）。`AiClient.respond(req): Promise<Result<AiTaskPayload>>` 是脚本AI↔LLM 的唯一切换接缝；`withFallback(httpAi, scriptedAi)` 实现失败降级。
+
+## 现状基线
+
+- `npm test` → 5 文件 **32 用例全绿**；`npm run build`（tsc+vite）通过。
+- 未提交 WIP 已把 `submitSpeech` 的 `day_speech→vote` 转换 + `getViewerIdForEvent`/`getViewerId` 的 vote/tie/last-words viewer 解析就位；**真正的投票处理器还没有**（M1 要加）。
+
+## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
+
+- **M0** 工程准备：✅ **已完成**——分支 `build/mvp-playable` 已建；`zustand@5`/`dexie@4`/`fake-indexeddb@6` 已装；基线 `npm test` 32 绿。下一步直接进 M1。
+- **M1** 投票/平票/放逐/遗言规则（`rules/index.ts` + `visibility.ts` + `voting.test.ts`）。**逐函数详细设计见 `docs/BUILD-PLAN.md` 的「M1 详细实现设计」一节，可直接照做。**
+- **M2** 快进 + 复盘上下文（`request_fast_forward`/`confirm_new_game` + `rules/review.ts` `buildReviewContext`）。
+- **M3** 持久化 Dexie + 恢复（`src/storage/`）。
+- **M4** ai-client 接缝 + 脚本兜底 + Store(Zustand) + AI 自动轮转 driver → 测试可玩。
+- **M5** ai-proxy（Vite 中间件 `/api/ai/respond`，OpenAI 兼容 chat completions）+ httpAi 客户端 + `.env.example` → LLM 驱动。
+- **M6** 聊天室 UI（StatusBar/MessageStream/ActionArea/TextInput/ReviewPanel，只读 visibleInformation）→ 浏览器里和 gpt-5.5 打一局。
+- **M7** 打磨 + 刷新恢复 + e2e 冒烟 + HITL 手测交付。
+
+## M1 头号踩坑点（详见 BUILD-PLAN）
+
+1. 进入 `vote` 时 `voteState` 未初始化 → 在 `submitSpeech` 转 vote 处**新增 voteState 字段**（不动 pendingAction，已核对不破坏 day-speech 测试）。投票是**并行模型**，pendingAction 全程 null，靠 voteState 判合法（需改 `visibility.ts` 的 `getLegalActions`/`canViewerAct`）。
+2. event seq 前向引用：放逐结算的 `exileEventId/deathEventId` 按预定 seq 先算后填（仿 resolveNight）。
+3. 夜 N>1 重建 nightState 按当前 alive 的狼+预言家（预言家死则只剩狼，防死锁）；夜>1 无首夜护真人。
+4. 死亡真人永不分配 pendingAction（仿 resolveNight 守卫），否则快进卡死。
+5. fallback/summary 元数据无法经 applyAction 流回（引擎从 controller 推 generatedBy）→ MVP 接受兜底事件标 `ai`。
+6. `buildVisibleInformation` 对不在 players 的 viewer 抛错 → role_setup/mode_select 别调它。
+7. 幂等键跨 viewer 复用被严格拒绝 → store 每个 action 生成唯一 key。
+
+## 备注
+
+我（上个会话）写的 4 篇记忆在 `C:\Users\DKM99\.claude\projects\C--Users-DKM99\memory\`，但那绑定的是 `C:\Users\user\` cwd，**项目会话不会自动加载**，仅作备份。本 `CLAUDE.md` + `docs/BUILD-PLAN.md` 才是项目内的权威交接。
