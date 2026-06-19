@@ -1,7 +1,11 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { AiClient } from "../ai-client";
-import { applyAction, buildVisibleInformation } from "../rules";
+import {
+  applyAction,
+  buildReviewContext,
+  buildVisibleInformation,
+} from "../rules";
 import {
   clearCurrentGame,
   recoverGame,
@@ -11,8 +15,12 @@ import {
 import type {
   AppError,
   GameAction,
+  GamePhase,
   GameSession,
   GameSnapshot,
+  HumanParticipationState,
+  ReviewContext,
+  Result,
   TruthEvent,
   VisibleInformationSnapshot,
 } from "../shared";
@@ -40,11 +48,25 @@ export type GameStoreState = {
   visibleInformation: VisibleInformationSnapshot | null;
   messages: ChatMessage[];
   lastError: AppError | null;
+  /**
+   * 当前相位（非机密控制字段）。role_setup/mode_select 等阶段 visibleInformation 为 null，
+   * UI 仍需据此渲染入口/设置屏；相位枚举本身不泄露任何隐藏身份。
+   */
+  phase: GamePhase | null;
+  /** 真人参与态（非机密）。UI 据此叠加只读/快进规则。 */
+  participation: HumanParticipationState | null;
+  /** 完整真相只在 review 阶段组装（ISO-002）；其余阶段恒为 null。 */
+  reviewContext: ReviewContext | null;
 
   /** 启动恢复：读存档→校验→（必要时）续跑 AI。 */
   bootstrap: () => Promise<void>;
   /** 唯一的状态变更漏斗：规则引擎→持久化→派生→自动轮转 AI。 */
   dispatch: (action: GameAction) => Promise<void>;
+  /**
+   * 复盘追问：仅 review 阶段合法，基于 reviewContext 调 AI（不是 GameAction、不改局面）。
+   * 返回 AI 回答文本或错误，由 UI 自行维护问答记录。
+   */
+  askReview: (question: string) => Promise<Result<string>>;
 };
 
 export type GameStore = StoreApi<GameStoreState>;
@@ -91,12 +113,21 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
     /** 提交一份新状态到 store 并持久化（不改 busy / lastError 由调用方控制）。 */
     const commit = async (state: DriverState): Promise<void> => {
       const visibleInformation = humanVisibleInformation(state);
+      const { snapshot } = state;
+      // ISO-002：完整真相只在 review 阶段经 buildReviewContext 组装。
+      const reviewContext =
+        snapshot.gamePhase === "review"
+          ? buildReviewContext(state.session, snapshot.players, state.events)
+          : null;
       set({
         session: state.session,
-        snapshot: state.snapshot,
+        snapshot,
         events: state.events,
         visibleInformation,
         messages: deriveMessages(visibleInformation, null),
+        phase: snapshot.gamePhase,
+        participation: snapshot.humanParticipationState,
+        reviewContext,
       });
       await persist(state);
     };
@@ -119,6 +150,9 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
       visibleInformation: null,
       messages: [],
       lastError: null,
+      phase: null,
+      participation: null,
+      reviewContext: null,
 
       bootstrap: async () => {
         set({ busy: true, lastError: null });
@@ -175,6 +209,9 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
             messages: [],
             busy: false,
             lastError: null,
+            phase: success.snapshot.gamePhase,
+            participation: success.snapshot.humanParticipationState,
+            reviewContext: null,
           });
           return;
         }
@@ -192,6 +229,34 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         state = await drive(state);
         await commit(state);
         set({ busy: false });
+      },
+
+      askReview: async (question: string): Promise<Result<string>> => {
+        const { snapshot, reviewContext } = get();
+        // ISO-002：仅 review 阶段允许构造/发送 reviewContext。
+        if (snapshot?.gamePhase !== "review" || !reviewContext) {
+          return {
+            ok: false,
+            error: {
+              code: "ACTION_NOT_ALLOWED",
+              message: "复盘追问仅在复盘阶段可用。",
+              userMessage: "复盘追问仅在复盘阶段可用。",
+              retryable: false,
+              source: "app",
+            },
+          };
+        }
+        const response = await ai.respond({
+          gameId: snapshot.gameId,
+          taskType: "review_question",
+          questionText: question,
+          reviewContext,
+        });
+        if (!response.ok) {
+          return { ok: false, error: response.error };
+        }
+        const text = (response.data.text ?? "").trim();
+        return { ok: true, data: text.length > 0 ? text : "（AI 未给出回答）" };
       },
     };
   });

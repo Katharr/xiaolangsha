@@ -1,35 +1,293 @@
-.app-shell {
-  min-height: 100vh;
+/* 聊天室式 MVP：外壳固定在一个视口内，仅消息流内部滚动。 */
+.app-root {
+  position: relative;
+  height: 100vh;
   display: grid;
-  place-items: center;
-  padding: 32px;
-  color: #18202f;
-  background:
-    linear-gradient(135deg, rgba(105, 136, 116, 0.18), transparent 34%),
-    #f5f7f2;
+  grid-template-rows: auto 1fr auto;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-left: 1px solid #e2e6dd;
+  border-right: 1px solid #e2e6dd;
 }
 
-.shell-panel {
-  width: min(520px, 100%);
-  padding: 32px;
-  border: 1px solid #c8d0c0;
+/* 顶部状态栏 */
+.status-bar {
+  padding: 10px 16px;
+  background: #2c3a30;
+  color: #f3f6f0;
+  border-bottom: 1px solid #1f2a22;
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 0.95rem;
+}
+
+.status-phase {
+  font-weight: 700;
+}
+
+.status-round {
+  opacity: 0.85;
+}
+
+.status-role {
+  margin-left: auto;
+  font-weight: 600;
+  color: #ffd98a;
+}
+
+.status-tag {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #6b4a4a;
+  font-size: 0.8rem;
+}
+
+.status-players {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
+.status-players .seat-dead {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* 消息流：唯一滚动区域 */
+.app-main {
+  overflow-y: auto;
+  padding: 16px;
+  background: #f6f8f3;
+}
+
+.message-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-empty,
+.review-empty {
+  color: #8a9581;
+  font-size: 0.9rem;
+}
+
+.message {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 12px;
   border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e6eadf;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.message-tag {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: #7a8472;
+}
+
+.message-host {
+  background: #eef3ea;
+}
+
+.message-private_info {
+  background: #fff7e6;
+  border-color: #f0dcae;
+}
+
+.message-vote_result {
+  background: #eaf0f6;
+  border-color: #c9d6e6;
+}
+
+.message-system {
+  background: #fdecec;
+  border-color: #f2c4c4;
+  color: #8a3b3b;
+}
+
+.message-self {
+  align-self: flex-end;
+  background: #d9ead0;
+  border-color: #b7d3a6;
+}
+
+/* 操作区 + 输入区 */
+.app-controls {
+  border-top: 1px solid #e2e6dd;
   background: #ffffff;
 }
 
-.shell-kicker {
-  margin: 0 0 12px;
-  color: #586152;
-  font-size: 0.875rem;
+.action-area {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.shell-panel h1 {
-  margin: 0 0 16px;
-  font-size: 2.5rem;
-  line-height: 1.1;
-}
-
-.shell-panel p {
+.action-hint {
   margin: 0;
-  line-height: 1.6;
+  font-size: 0.9rem;
+  color: #4a5446;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.target-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button {
+  font: inherit;
+  padding: 8px 16px;
+  border: 1px solid #5a7a5f;
+  border-radius: 6px;
+  background: #5a7a5f;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.target {
+  background: #ffffff;
+  color: #2c3a30;
+  border-color: #c0cbb8;
+}
+
+button.target.selected {
+  background: #5a7a5f;
+  color: #ffffff;
+  border-color: #5a7a5f;
+}
+
+.text-input {
+  padding: 0 16px 14px;
+}
+
+.text-input-field {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid #c0cbb8;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.text-input-field:disabled {
+  background: #f1f3ee;
+}
+
+.text-input-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.char-count {
+  font-size: 0.78rem;
+  color: #8a9581;
+}
+
+.char-count.over {
+  color: #c0392b;
+}
+
+.text-input-hint {
+  font-size: 0.82rem;
+  color: #c0392b;
+}
+
+.text-input-footer button {
+  margin-left: auto;
+}
+
+/* 复盘面板 */
+.review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.review-section h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: #2c3a30;
+}
+
+.review-outcome {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #5a7a5f;
+}
+
+.review-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.review-qa {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-question {
+  margin: 0;
+  font-weight: 600;
+}
+
+.qa-answer {
+  margin: 2px 0 0;
+  color: #4a5446;
+}
+
+.new-game-button {
+  align-self: flex-start;
+}
+
+/* 加载遮罩 */
+.app-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
+  color: #4a5446;
 }
