@@ -7,3 +7,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .server-*.log
+
+# 本地凭证：只保留 .env.example 模板，真实 .env 绝不入库
+.env
+.env.*
+!.env.example
