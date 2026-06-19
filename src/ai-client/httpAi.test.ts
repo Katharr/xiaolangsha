@@ -13,6 +13,7 @@ function fakeVi(): VisibleInformationSnapshot {
     gamePhase: "vote",
     round: { night: 1, day: 1, voteRound: "first" },
     ownSeat: 2,
+    ownName: "莉莉",
     ownRole: "villager",
     ownFaction: "good_team",
     alivePlayers: [],

@@ -47,6 +47,10 @@ export type BoardConfig = {
   allowAbstainVote: boolean;
   allowSelfVote: boolean;
   maxTieRounds: number;
+  /** 女巫是否可在首夜对自己用解药（默认 false）。 */
+  witchCanSelfSaveFirstNight?: boolean;
+  /** 守卫是否禁止连续两夜守同一人（默认 true，本期未上守卫可忽略）。 */
+  guardCannotRepeat?: boolean;
 };
 
 export type Player = {
@@ -81,12 +85,46 @@ export type PendingAction = {
   expiresAt?: string;
 };
 
+/** 夜晚某一步（按角色）：守卫守护 / 狼队刀人 / 预言家查验 / 女巫用药。 */
+export type NightStepKind =
+  | "guard_protect"
+  | "werewolf_kill"
+  | "seer_check"
+  | "witch_action";
+
+export type NightStep = {
+  kind: NightStepKind;
+  /** 该步需要行动的玩家（狼队为全部存活狼）。 */
+  actorIds: string[];
+  submittedActorIds: string[];
+};
+
+/**
+ * 顺序夜晚状态机：按 `steps` 顺序逐步行动，`currentStepIndex` 指向当前步。
+ * 累积字段仅供引擎内部结算，绝不进入任何 public 事件（信息隔离 ISO-001）。
+ */
 export type NightState = {
   night: number;
-  requiredActorIds: string[];
-  submittedActorIds: string[];
+  steps: NightStep[];
+  currentStepIndex: number;
+  /** 守卫本夜守护的目标。 */
+  guardProtectedId?: string;
+  /** 狼队各自的刀票：wolfId → targetId。 */
+  wolfVotes?: Record<string, string>;
+  /** 狼队结算后的最终刀杀目标。 */
+  wolfKillTargetId?: string;
+  /** 女巫本夜用解药救下的目标（救被刀者）。 */
+  witchSavedTargetId?: string;
+  /** 女巫本夜毒杀的目标。 */
+  poisonTargetId?: string;
   resolved: boolean;
   deathPlayerIds: string[];
+};
+
+/** 女巫全局用药状态（解药/毒药各一次），随快照持久化。 */
+export type WitchState = {
+  saveAvailable: boolean;
+  poisonAvailable: boolean;
 };
 
 export type SpeechState = {
@@ -145,8 +183,14 @@ export type GameSnapshot = {
   players: Player[];
   pendingAction?: PendingAction | null;
   nightState?: NightState;
+  witchState?: WitchState;
   speechState?: SpeechState;
   voteState?: VoteState;
+  /** 待开枪的猎人 id（死亡触发，相位 hunter_shoot 时存在）。 */
+  pendingHunterId?: string;
+  /** 猎人开枪由放逐触发（true）还是夜死触发（false）——决定开枪后回到夜晚还是白天发言。 */
+  hunterShootFromExile?: boolean;
+  /** 猎人开枪后需要恢复到的相位推进意图（内部流转用）。 */
   lastResolvedEventId?: string;
   winner?: Faction;
   winReason?: WinReason;

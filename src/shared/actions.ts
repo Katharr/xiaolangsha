@@ -1,9 +1,9 @@
 import type {
   ActiveVoteRound,
   GameMode,
-  NightActionType,
   Role,
   VoteChoiceType,
+  WitchChoice,
 } from "./enums";
 
 type BaseGameAction = {
@@ -30,7 +30,21 @@ export type GameAction = BaseGameAction &
     | {
         type: "submit_night_action";
         actorId: string;
-        actionType: Exclude<NightActionType, "none">;
+        // 狼刀 / 预言家验 / 守卫守护走这里；女巫、猎人各有独立动作。
+        actionType: "werewolf_kill" | "seer_check" | "guard_protect";
+        targetId?: string;
+      }
+    | {
+        type: "submit_witch_action";
+        actorId: string;
+        witchChoice: WitchChoice;
+        // save 无需 target（救被刀者）；poison 需要 targetId；skip 无 target。
+        targetId?: string;
+      }
+    | {
+        type: "submit_hunter_shoot";
+        actorId: string;
+        // 开枪带走的目标；不开枪则省略。
         targetId?: string;
       }
     | {

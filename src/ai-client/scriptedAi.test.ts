@@ -18,6 +18,7 @@ function baseVi(
     gamePhase: "night_action",
     round: { night: 1, day: 0, voteRound: "none" },
     ownSeat: 1,
+    ownName: "阿杰",
     ownRole: "werewolf",
     ownFaction: "werewolf_team",
     alivePlayers: [],

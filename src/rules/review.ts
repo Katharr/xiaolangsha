@@ -87,13 +87,29 @@ function toReviewVote(event: TruthEvent): ReviewVoteRef[] {
   ];
 }
 
+const REVIEW_NIGHT_ACTION_TYPES = [
+  "werewolf_kill",
+  "seer_check",
+  "guard_protect",
+  "witch_save",
+  "witch_poison",
+] as const;
+
 function toReviewNightAction(event: TruthEvent): ReviewNightActionRef[] {
   if (event.type !== "night_action_resolved") {
     return [];
   }
 
-  const actionType =
-    event.payload.actionType === "seer_check" ? "seer_check" : "werewolf_kill";
+  const raw = event.payload.actionType;
+  const actionType = (REVIEW_NIGHT_ACTION_TYPES as readonly string[]).includes(
+    String(raw),
+  )
+    ? (raw as ReviewNightActionRef["actionType"])
+    : null;
+  // 跳过非具体行动的 resolved（如女巫醒来提示 actionType="none"）。
+  if (!actionType) {
+    return [];
+  }
 
   return [
     {
@@ -150,5 +166,10 @@ function isFaction(value: unknown): value is Faction {
 }
 
 function isWinReason(value: unknown): value is WinReason {
-  return value === "all_werewolves_dead" || value === "werewolves_reach_parity";
+  return (
+    value === "all_werewolves_dead" ||
+    value === "werewolves_reach_parity" ||
+    value === "all_gods_dead" ||
+    value === "all_folk_dead"
+  );
 }

@@ -178,7 +178,10 @@ describe("P9-S04 first night and night resolution rules", () => {
       "night_action_submitted",
     ]);
     expect(wolfSubmitted.snapshot.gamePhase).toBe("night_action");
-    expect(wolfSubmitted.snapshot.nightState?.submittedActorIds).toEqual([wolfId]);
+    expect(wolfSubmitted.snapshot.nightState?.steps[0]?.submittedActorIds).toEqual([
+      wolfId,
+    ]);
+    expect(wolfSubmitted.snapshot.nightState?.currentStepIndex).toBe(1);
 
     const seerSubmitted = expectOk(
       submitNightAction(afterWolf, {
@@ -242,7 +245,6 @@ describe("P9-S04 first night and night resolution rules", () => {
     ).toEqual({
       playerId: killedVillagerId,
       deathCause: "night_kill",
-      sourceEventId: expect.any(String),
       revealRolePublicly: false,
     });
   });
@@ -337,8 +339,10 @@ describe("P9-S04 first night and night resolution rules", () => {
       round: { night: 2, day: 1, voteRound: "none" },
       nightState: {
         night: 2,
-        requiredActorIds: [wolfId],
-        submittedActorIds: [],
+        steps: [
+          { kind: "werewolf_kill", actorIds: [wolfId], submittedActorIds: [] },
+        ],
+        currentStepIndex: 0,
         resolved: false,
         deathPlayerIds: [],
       },

@@ -20,6 +20,7 @@ import {
   voteRounds,
   winConditionModes,
   winReasons,
+  witchChoices,
 } from "./enums";
 import { appErrorCodes, appErrorSources } from "./result";
 
@@ -35,6 +36,7 @@ export const humanParticipationStateSchema = z.enum(humanParticipationStates);
 export const deathCauseSchema = z.enum(deathCauses);
 export const voteChoiceTypeSchema = z.enum(voteChoiceTypes);
 export const nightActionTypeSchema = z.enum(nightActionTypes);
+export const witchChoiceSchema = z.enum(witchChoices);
 export const winConditionModeSchema = z.enum(winConditionModes);
 export const winReasonSchema = z.enum(winReasons);
 export const eventSourceSchema = z.enum(eventSources);
@@ -117,7 +119,18 @@ export const gameActionSchema = z.discriminatedUnion("type", [
   baseActionSchema.extend({
     type: z.literal("submit_night_action"),
     actorId: nonEmptyString,
-    actionType: z.enum(["werewolf_kill", "seer_check"]),
+    actionType: z.enum(["werewolf_kill", "seer_check", "guard_protect"]),
+    targetId: z.string().optional(),
+  }),
+  baseActionSchema.extend({
+    type: z.literal("submit_witch_action"),
+    actorId: nonEmptyString,
+    witchChoice: witchChoiceSchema,
+    targetId: z.string().optional(),
+  }),
+  baseActionSchema.extend({
+    type: z.literal("submit_hunter_shoot"),
+    actorId: nonEmptyString,
     targetId: z.string().optional(),
   }),
   baseActionSchema.extend({
@@ -263,12 +276,28 @@ export const pendingActionSchema = z.object({
   expiresAt: z.string().optional(),
 });
 
+export const nightStepSchema = z.object({
+  kind: z.enum(["guard_protect", "werewolf_kill", "seer_check", "witch_action"]),
+  actorIds: z.array(z.string()),
+  submittedActorIds: z.array(z.string()),
+});
+
 export const nightStateSchema = z.object({
   night: z.number().int().nonnegative(),
-  requiredActorIds: z.array(z.string()),
-  submittedActorIds: z.array(z.string()),
+  steps: z.array(nightStepSchema),
+  currentStepIndex: z.number().int().nonnegative(),
+  guardProtectedId: z.string().optional(),
+  wolfVotes: z.record(z.string(), z.string()).optional(),
+  wolfKillTargetId: z.string().optional(),
+  witchSavedTargetId: z.string().optional(),
+  poisonTargetId: z.string().optional(),
   resolved: z.boolean(),
   deathPlayerIds: z.array(z.string()),
+});
+
+export const witchStateSchema = z.object({
+  saveAvailable: z.boolean(),
+  poisonAvailable: z.boolean(),
 });
 
 export const speechStateSchema = z.object({
@@ -298,8 +327,11 @@ export const gameSnapshotSchema = z.object({
   players: z.array(playerSchema),
   pendingAction: pendingActionSchema.optional().nullable(),
   nightState: nightStateSchema.optional(),
+  witchState: witchStateSchema.optional(),
   speechState: speechStateSchema.optional(),
   voteState: voteStateSchema.optional(),
+  pendingHunterId: z.string().optional(),
+  hunterShootFromExile: z.boolean().optional(),
   lastResolvedEventId: z.string().optional(),
   winner: factionSchema.optional(),
   winReason: winReasonSchema.optional(),
@@ -340,6 +372,8 @@ const inGameAiTaskRequestSchema = z.object({
   taskType: z.enum([
     "speech",
     "night_action",
+    "witch_action",
+    "hunter_shoot",
     "vote",
     "tie_speech",
     "last_words",
@@ -369,7 +403,10 @@ export const aiTaskPayloadSchema = z.object({
   text: z.string().optional(),
   targetId: z.string().optional(),
   choiceType: voteChoiceTypeSchema.optional(),
-  actionType: z.enum(["werewolf_kill", "seer_check"]).optional(),
+  actionType: z
+    .enum(["werewolf_kill", "seer_check", "guard_protect"])
+    .optional(),
+  witchChoice: witchChoiceSchema.optional(),
   analysisSummary: z.string().optional(),
   decisionSummary: z.string().optional(),
 });

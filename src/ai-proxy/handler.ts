@@ -96,9 +96,10 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
   const vi = req.visibleInformation;
   const draft = req.promptContext?.currentText;
 
+  const totalPlayers = vi.alivePlayers.length + vi.deadPlayers.length;
   return {
     system: [
-      "你正在玩一局 5 人狼人杀（1 狼人、1 预言家、3 村民）。",
+      `你正在玩一局 ${totalPlayers} 人狼人杀（主流「预女猎」屠边规则：杀光所有平民或所有神职任一边，狼人即获胜）。`,
       `你叫「${vi.ownName}」，坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
       "所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
       "重要：你只能依据下面提供的「可见信息」做判断，绝不能假设你知道其他玩家的真实身份，也不要凭空怀疑或针对某位玩家——只根据其发言与行为的逻辑来推理。",
@@ -119,13 +120,21 @@ const OUTPUT_CONTRACT = [
   '- text: string —— 你的发言/遗言/拉票文本（发言类任务必填）。',
   '- choiceType: "target" | "abstain" —— 投票任务用，target 表示投某人，abstain 表示弃票。',
   '- targetId: string —— 行动/投票的目标玩家 id，必须取自可见信息给出的合法目标。',
-  '- actionType: "werewolf_kill" | "seer_check" —— 夜晚行动任务用。',
+  '- actionType: "werewolf_kill" | "seer_check" | "guard_protect" —— 狼刀/预言家查验/守卫守护任务用。',
+  '- witchChoice: "save" | "poison" | "skip" —— 女巫任务用：救被刀者 / 用毒药（配 targetId）/ 放弃。',
   "- analysisSummary: string —— （可选）你的私下分析，不会展示给其他玩家。",
   "- decisionSummary: string —— （可选）你做出该决策的简要理由，不会展示给其他玩家。",
 ].join("\n");
 
 function taskInstruction(
-  taskType: "speech" | "night_action" | "vote" | "tie_speech" | "last_words",
+  taskType:
+    | "speech"
+    | "night_action"
+    | "witch_action"
+    | "hunter_shoot"
+    | "vote"
+    | "tie_speech"
+    | "last_words",
   vi: VisibleInformationSnapshot,
 ): string {
   const legalTargets = vi.legalActions.flatMap((action) => action.legalTargets);
@@ -134,7 +143,11 @@ function taskInstruction(
 
   switch (taskType) {
     case "night_action":
-      return `任务：夜晚行动。请根据你的身份选择 actionType 并指定 targetId。${targetsHint}`;
+      return `任务：夜晚行动。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。${targetsHint}`;
+    case "witch_action":
+      return `任务：女巫行动。你已得知今晚被狼刀的人（见可见信息里仅你可见的私有事件）。选择 witchChoice：save 救他、poison 并给出 targetId 毒一人、或 skip 放弃。解药和毒药各只有一次。${targetsHint}`;
+    case "hunter_shoot":
+      return `任务：你是猎人且已出局，可开枪带走一名存活玩家。给出 targetId 开枪，或留空放弃开枪。${targetsHint}`;
     case "vote":
       return `任务：投票放逐。选择 choiceType="target" 并给出 targetId 投出你的一票，或在允许时 choiceType="abstain" 弃票。不能投自己。${targetsHint}`;
     case "speech":
@@ -154,6 +167,14 @@ function describeRole(role: string): string {
       return "狼人";
     case "seer":
       return "预言家";
+    case "witch":
+      return "女巫";
+    case "hunter":
+      return "猎人";
+    case "guard":
+      return "守卫";
+    case "idiot":
+      return "白痴";
     case "villager":
       return "村民";
     default:

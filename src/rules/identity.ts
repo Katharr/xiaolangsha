@@ -1,4 +1,4 @@
-import type { BoardConfig, Faction, Player, Role } from "../shared";
+import type { BoardConfig, Faction, Player, Role, RoleCategory } from "../shared";
 
 const standardHumanRoleOrder: Role[] = ["werewolf", "seer", "villager"];
 
@@ -21,6 +21,17 @@ const NAME_POOL: string[] = [
 
 export function getFactionForRole(role: Role): Faction {
   return role === "werewolf" ? "werewolf_team" : "good_team";
+}
+
+/** 角色大类：狼 / 神职 / 平民。用于屠边胜负判定。 */
+export function roleCategory(role: Role): RoleCategory {
+  if (role === "werewolf") {
+    return "wolf";
+  }
+  if (role === "villager") {
+    return "folk";
+  }
+  return "god"; // seer / witch / hunter / guard / idiot
 }
 
 export function assignStandardPlayers(params: {

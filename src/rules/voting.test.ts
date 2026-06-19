@@ -367,8 +367,11 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     expect(lastWords.snapshot.round).toEqual({ night: 2, day: 1, voteRound: "none" });
     expect(lastWords.snapshot.nightState).toEqual({
       night: 2,
-      requiredActorIds: ["ai-1", "ai-2"],
-      submittedActorIds: [],
+      steps: [
+        { kind: "werewolf_kill", actorIds: ["ai-1"], submittedActorIds: [] },
+        { kind: "seer_check", actorIds: ["ai-2"], submittedActorIds: [] },
+      ],
+      currentStepIndex: 0,
       resolved: false,
       deathPlayerIds: [],
     });

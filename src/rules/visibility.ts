@@ -1,6 +1,7 @@
 import type {
   GameSnapshot,
   LegalAction,
+  NightActionType,
   Player,
   PublicDeathRef,
   PublicPlayerRef,
@@ -10,6 +11,7 @@ import type {
   VisibleSpeech,
   VisibleVote,
 } from "../shared";
+import { currentNightStep, legalNightTargets } from "./night";
 
 export function buildVisibleInformation(
   viewerId: string,
@@ -151,25 +153,50 @@ function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] 
   }
 
   if (snapshot.gamePhase === "night_action") {
-    const nightActionType =
+    // canViewerAct 已确保 viewer 是当前步骤的行动者；按角色给出动作类型。
+    const targets = legalNightTargets(viewer, snapshot.players, snapshot.round.night);
+    if (viewer.role === "witch") {
+      return [
+        {
+          actionType: "witch_action",
+          actorId: viewer.playerId,
+          legalTargets: targets,
+          allowAbstain: true,
+          required: true,
+        },
+      ];
+    }
+    const nightActionType: NightActionType | null =
       viewer.role === "werewolf"
         ? "werewolf_kill"
         : viewer.role === "seer"
           ? "seer_check"
-          : null;
-
+          : viewer.role === "guard"
+            ? "guard_protect"
+            : null;
     if (!nightActionType) {
       return [];
     }
-
     return [
       {
         actionType: nightActionType,
         actorId: viewer.playerId,
-        legalTargets: snapshot.players
-          .filter((player) => isLegalNightTarget(viewer, player, snapshot))
-          .map((player) => player.playerId),
+        legalTargets: targets,
         allowAbstain: false,
+        required: true,
+      },
+    ];
+  }
+
+  if (snapshot.gamePhase === "hunter_shoot") {
+    return [
+      {
+        actionType: "hunter_shoot",
+        actorId: viewer.playerId,
+        legalTargets: snapshot.players
+          .filter((player) => player.alive && player.playerId !== viewer.playerId)
+          .map((player) => player.playerId),
+        allowAbstain: true,
         required: true,
       },
     ];
@@ -247,9 +274,9 @@ function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] 
 }
 
 function canViewerAct(viewer: Player, snapshot: GameSnapshot): boolean {
-  // The exiled player gives last words after they are already dead, so this
-  // case must be handled before the generic alive guard below.
-  if (snapshot.gamePhase === "exile_last_words") {
+  // The exiled player gives last words / a dead hunter shoots after they are
+  // already dead, so these must be handled before the generic alive guard.
+  if (snapshot.gamePhase === "exile_last_words" || snapshot.gamePhase === "hunter_shoot") {
     return snapshot.pendingAction?.actorId === viewer.playerId;
   }
 
@@ -262,11 +289,17 @@ function canViewerAct(viewer: Player, snapshot: GameSnapshot): boolean {
   }
 
   if (snapshot.gamePhase === "night_action") {
+    const nightState = snapshot.nightState;
+    if (!nightState || nightState.resolved) {
+      return false;
+    }
+    const step = currentNightStep(nightState);
+    if (!step) {
+      return false;
+    }
     return (
-      (viewer.role === "werewolf" || viewer.role === "seer") &&
-      Boolean(snapshot.nightState?.requiredActorIds.includes(viewer.playerId)) &&
-      !snapshot.nightState?.resolved &&
-      !snapshot.nightState?.submittedActorIds.includes(viewer.playerId)
+      step.actorIds.includes(viewer.playerId) &&
+      !step.submittedActorIds.includes(viewer.playerId)
     );
   }
 
@@ -284,24 +317,4 @@ function canViewerAct(viewer: Player, snapshot: GameSnapshot): boolean {
   }
 
   return snapshot.pendingAction?.actorId === viewer.playerId;
-}
-
-function isLegalNightTarget(
-  viewer: Player,
-  target: Player,
-  snapshot: GameSnapshot,
-): boolean {
-  if (!target.alive || target.playerId === viewer.playerId) {
-    return false;
-  }
-
-  if (
-    viewer.role === "werewolf" &&
-    snapshot.round.night === 1 &&
-    target.isHuman
-  ) {
-    return false;
-  }
-
-  return true;
 }

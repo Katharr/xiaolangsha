@@ -25,6 +25,10 @@ export class ScriptedAiClient implements AiClient {
     switch (req.taskType) {
       case "night_action":
         return ok(decideNightAction(vi, seed));
+      case "witch_action":
+        return ok(decideWitchAction(vi));
+      case "hunter_shoot":
+        return ok(decideHunterShoot(vi, seed));
       case "vote":
         return ok(decideVote(vi, seed));
       case "speech":
@@ -46,7 +50,9 @@ function decideNightAction(
 ): AiTaskPayload {
   const action = vi.legalActions.find(
     (legal) =>
-      legal.actionType === "werewolf_kill" || legal.actionType === "seer_check",
+      legal.actionType === "werewolf_kill" ||
+      legal.actionType === "seer_check" ||
+      legal.actionType === "guard_protect",
   );
 
   if (!action) {
@@ -55,9 +61,59 @@ function decideNightAction(
 
   const targetId = pickSeeded(action.legalTargets, seed);
   return {
-    actionType: action.actionType as "werewolf_kill" | "seer_check",
+    actionType: action.actionType as
+      | "werewolf_kill"
+      | "seer_check"
+      | "guard_protect",
     ...(targetId ? { targetId } : {}),
   };
+}
+
+/**
+ * 女巫兜底：默认 skip（永远合法，绝不卡死 driver）。仅当今晚有人倒牌、且本局
+ * 尚未用过解药（从自己的私有事件可推断）、又不构成首夜自救时，才用解药救人。
+ */
+function decideWitchAction(vi: VisibleInformationSnapshot): AiTaskPayload {
+  const killedTargetId = findWitchKillTarget(vi);
+  const alreadySaved = vi.privateEvents.some(
+    (event) =>
+      event.type === "night_action_submitted" &&
+      event.payload.witchChoice === "save",
+  );
+  const firstNightSelfSave =
+    killedTargetId === vi.viewerId && vi.round.night === 1;
+
+  if (killedTargetId && !alreadySaved && !firstNightSelfSave) {
+    return { witchChoice: "save" };
+  }
+  return { witchChoice: "skip" };
+}
+
+/** 从女巫的私有事件里读出今晚被狼刀的目标（无则 undefined）。 */
+function findWitchKillTarget(vi: VisibleInformationSnapshot): string | undefined {
+  for (const event of [...vi.privateEvents].reverse()) {
+    const result = event.payload.result as
+      | { kind?: unknown; killedTargetId?: unknown }
+      | undefined;
+    if (result && result.kind === "witch_wake") {
+      return typeof result.killedTargetId === "string"
+        ? result.killedTargetId
+        : undefined;
+    }
+  }
+  return undefined;
+}
+
+/** 猎人兜底：从合法目标里确定性挑一个开枪（无目标则放弃）。 */
+function decideHunterShoot(
+  vi: VisibleInformationSnapshot,
+  seed: string,
+): AiTaskPayload {
+  const action = vi.legalActions.find(
+    (legal) => legal.actionType === "hunter_shoot",
+  );
+  const targetId = action ? pickSeeded(action.legalTargets, seed) : undefined;
+  return targetId ? { targetId } : {};
 }
 
 function decideVote(

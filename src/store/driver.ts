@@ -15,6 +15,8 @@ const DEFAULT_MAX_STEPS = 300;
 /** 局中（非复盘）AI 任务类型——driver 只产出这些。 */
 export type InGameTaskType =
   | "night_action"
+  | "witch_action"
+  | "hunter_shoot"
   | "speech"
   | "vote"
   | "tie_speech"
@@ -60,16 +62,41 @@ export function nextDriverStep(
       if (!nightState || nightState.resolved) {
         return null;
       }
-      const aiActor = nightState.requiredActorIds.find((id) => {
-        if (nightState.submittedActorIds.includes(id)) {
-          return false;
-        }
-        const player = playerById(id);
-        return Boolean(player && player.controller === "ai" && player.alive);
-      });
-      return aiActor
-        ? { kind: "ai", actorId: aiActor, taskType: "night_action" }
-        : null;
+      const step = nightState.steps[nightState.currentStepIndex];
+      if (!step) {
+        return null;
+      }
+      const actorId = step.actorIds.find(
+        (id) =>
+          !step.submittedActorIds.includes(id) &&
+          Boolean(playerById(id)?.alive),
+      );
+      if (!actorId) {
+        return null;
+      }
+      const player = playerById(actorId);
+      if (!player || player.controller !== "ai") {
+        return null; // 轮到真人行动，停下等 UI。
+      }
+      const taskType: InGameTaskType =
+        step.kind === "witch_action" ? "witch_action" : "night_action";
+      return { kind: "ai", actorId, taskType };
+    }
+
+    case "hunter_shoot": {
+      const actorId = snapshot.pendingAction?.actorId;
+      if (!actorId) {
+        return null;
+      }
+      const player = playerById(actorId);
+      if (!player) {
+        return null;
+      }
+      // AI 猎人自动开枪；真人猎人由 UI 决定，除非真人已死且正在快进。
+      if (player.controller === "ai" || isFastForward) {
+        return { kind: "ai", actorId, taskType: "hunter_shoot" };
+      }
+      return null;
     }
 
     case "day_announcement": {
@@ -170,7 +197,9 @@ export function payloadToAction(params: {
           ? "werewolf_kill"
           : actor?.role === "seer"
             ? "seer_check"
-            : undefined);
+            : actor?.role === "guard"
+              ? "guard_protect"
+              : undefined);
       if (!actionType) {
         return null;
       }
@@ -182,6 +211,23 @@ export function payloadToAction(params: {
         ...(payload.targetId ? { targetId: payload.targetId } : {}),
       };
     }
+
+    case "witch_action":
+      return {
+        type: "submit_witch_action",
+        idempotencyKey,
+        actorId: step.actorId,
+        witchChoice: payload.witchChoice ?? "skip",
+        ...(payload.targetId ? { targetId: payload.targetId } : {}),
+      };
+
+    case "hunter_shoot":
+      return {
+        type: "submit_hunter_shoot",
+        idempotencyKey,
+        actorId: step.actorId,
+        ...(payload.targetId ? { targetId: payload.targetId } : {}),
+      };
 
     case "speech":
       return {

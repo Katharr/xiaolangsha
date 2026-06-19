@@ -253,6 +253,7 @@ describe("P9-S03 create game and role reveal rules", () => {
     expect(confirmed.data.snapshot.nightState?.resolved).toBe(false);
     expect(confirmed.data.events.map((event) => event.type)).toEqual([
       "game_started",
+      "werewolf_team_revealed",
       "phase_changed",
     ]);
     expect(confirmed.data.visibleInformation.gamePhase).toBe("night_action");

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ScriptedAiClient } from "../ai-client";
 import { MVP_5P_BOARD_ID } from "../rules";
+import { STANDARD_7P_BOARD_ID } from "../rules/boards";
 import type { GameAction, GameMode } from "../shared";
 import {
   clearCurrentGame,
@@ -67,12 +68,27 @@ function nextHumanAction(store: GameStore): GameAction | null {
     switch (legal.actionType) {
       case "werewolf_kill":
       case "seer_check":
+      case "guard_protect":
         return {
           type: "submit_night_action",
           idempotencyKey: nextKey("night"),
           actorId: HUMAN,
           actionType: legal.actionType,
           targetId: legal.legalTargets[0],
+        };
+      case "witch_action":
+        return {
+          type: "submit_witch_action",
+          idempotencyKey: nextKey("witch"),
+          actorId: HUMAN,
+          witchChoice: "skip",
+        };
+      case "hunter_shoot":
+        return {
+          type: "submit_hunter_shoot",
+          idempotencyKey: nextKey("hunter"),
+          actorId: HUMAN,
+          ...(legal.legalTargets[0] ? { targetId: legal.legalTargets[0] } : {}),
         };
       case "speech":
         return {
@@ -162,19 +178,25 @@ function expectReachedReview(store: GameStore) {
   expect([
     "all_werewolves_dead",
     "werewolves_reach_parity",
+    "all_gods_dead",
+    "all_folk_dead",
   ]).toContain(rc?.winReason);
   // 复盘上下文含完整真相：至少有发言与夜晚行动记录。
   expect(rc?.speeches.length ?? 0).toBeGreaterThan(0);
   expect(rc?.nightActions.length ?? 0).toBeGreaterThan(0);
 }
 
-async function createGame(store: GameStore, mode: GameMode): Promise<void> {
+async function createGame(
+  store: GameStore,
+  mode: GameMode,
+  boardId: string = MVP_5P_BOARD_ID,
+): Promise<void> {
   await store.getState().bootstrap();
   await store.getState().dispatch({
     type: "create_game",
     idempotencyKey: nextKey("create"),
     mode,
-    boardId: MVP_5P_BOARD_ID,
+    boardId,
     humanPlayerId: HUMAN,
   });
 }
@@ -191,6 +213,28 @@ describe("e2e 冒烟：开局 → 复盘", () => {
   it("自由局（真人选村民）可从开局一路打到复盘并产出胜负", async () => {
     const { store } = freshStore();
     await createGame(store, "free");
+    await store.getState().dispatch({
+      type: "confirm_role_setup",
+      idempotencyKey: nextKey("setup"),
+      playerId: HUMAN,
+      selectedRole: "villager",
+    });
+    const reached = await playToReview(store);
+    expect(reached).toBe("review");
+    expectReachedReview(store);
+  });
+
+  it("7人标准局（预女猎屠边）可从开局打到复盘并产出胜负", async () => {
+    const { store } = freshStore();
+    await createGame(store, "standard", STANDARD_7P_BOARD_ID);
+    const reached = await playToReview(store);
+    expect(reached).toBe("review");
+    expectReachedReview(store);
+  });
+
+  it("7人自由局（真人选村民）可从开局打到复盘", async () => {
+    const { store } = freshStore();
+    await createGame(store, "free", STANDARD_7P_BOARD_ID);
     await store.getState().dispatch({
       type: "confirm_role_setup",
       idempotencyKey: nextKey("setup"),
