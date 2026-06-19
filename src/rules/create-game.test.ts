@@ -124,6 +124,100 @@ describe("P9-S03 create game and role reveal rules", () => {
     expect(confirmed.data.visibleInformation.alivePlayers.filter((player) => player.publicRole !== undefined)).toHaveLength(0);
   });
 
+  it("RULE-008 replays free-mode role setup with the original human viewer despite earlier same-key events without owners", () => {
+    const created = applyAction(
+      {
+        type: "create_game",
+        idempotencyKey: "create-free-role-setup-replay",
+        mode: "free",
+        boardId,
+        humanPlayerId,
+      },
+      { now: "2026-06-18T12:00:00.000Z" },
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const confirmed = applyAction(
+      {
+        type: "confirm_role_setup",
+        idempotencyKey: "setup-free-role-replay",
+        playerId: humanPlayerId,
+        selectedRole: "seer",
+      },
+      {
+        events: created.data.events,
+        snapshot: created.data.snapshot,
+        session: created.data.session,
+        now: "2026-06-18T12:00:01.000Z",
+      },
+    );
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) {
+      throw new Error(confirmed.error.message);
+    }
+    expect(confirmed.data.events.map((event) => event.type)).toEqual([
+      "players_assigned",
+      "human_role_revealed",
+    ]);
+
+    const replayed = applyAction(
+      {
+        type: "confirm_role_setup",
+        idempotencyKey: "setup-free-role-replay",
+        playerId: humanPlayerId,
+        selectedRole: "seer",
+      },
+      {
+        events: [...created.data.events, ...confirmed.data.events],
+        snapshot: confirmed.data.snapshot,
+        session: confirmed.data.session,
+        now: "2026-06-18T12:00:02.000Z",
+      },
+    );
+
+    expect(replayed.ok).toBe(true);
+    if (!replayed.ok) {
+      throw new Error(replayed.error.message);
+    }
+    expect(replayed.data.events).toEqual([]);
+    expect(replayed.data.snapshot).toEqual(confirmed.data.snapshot);
+    expect(replayed.data.session).toEqual(confirmed.data.session);
+    expect(replayed.data.visibleInformation.viewerId).toBe(humanPlayerId);
+    expect(replayed.data.visibleInformation.ownRole).toBe("seer");
+  });
+
+  it("RULE-008 rejects duplicate create_game replay when humanPlayerId differs from the original owner", () => {
+    const created = createStandardGame();
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const replayedByOtherHuman = applyAction(
+      {
+        type: "create_game",
+        idempotencyKey: "create-standard-1",
+        mode: "standard",
+        boardId,
+        humanPlayerId: "human-2",
+      },
+      {
+        events: created.data.events,
+        snapshot: created.data.snapshot,
+        session: created.data.session,
+        now: "2026-06-18T12:00:02.000Z",
+      },
+    );
+
+    expect(replayedByOtherHuman.ok).toBe(false);
+    if (!replayedByOtherHuman.ok) {
+      expect(replayedByOtherHuman.error.code).toBe("ACTION_NOT_ALLOWED");
+    }
+  });
+
   it("STATE-001 advances role reveal confirmation only from role_reveal to night_action", () => {
     const created = createStandardGame();
     expect(created.ok).toBe(true);
