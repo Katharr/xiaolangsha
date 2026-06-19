@@ -77,7 +77,18 @@ export function ReviewPanel({
         ) : (
           <ul className="review-list">
             {reviewContext.nightActions.map((night) => {
-              const verb = night.actionType === "werewolf_kill" ? "击杀" : "查验";
+              const verb =
+                night.actionType === "werewolf_kill"
+                  ? "击杀"
+                  : night.actionType === "seer_check"
+                    ? "查验"
+                    : night.actionType === "guard_protect"
+                      ? "守护"
+                      : night.actionType === "witch_save"
+                        ? "用解药救"
+                        : night.actionType === "witch_poison"
+                          ? "用毒药毒"
+                          : "行动";
               const faction =
                 night.result?.factionResult === "werewolf_team"
                   ? "（狼人）"

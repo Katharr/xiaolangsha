@@ -37,7 +37,7 @@ import {
 import { buildVisibleInformation } from "./visibility";
 
 export { buildVisibleInformation } from "./visibility";
-export { getBoardConfig, MVP_5P_BOARD_ID } from "./boards";
+export { getBoardConfig, MVP_5P_BOARD_ID, STANDARD_BOARD_ID } from "./boards";
 export { buildReviewContext } from "./review";
 
 const MAX_DAY_SPEECH_TEXT_LENGTH = 500;
@@ -710,6 +710,9 @@ function continueNight(params: {
             result: {
               kind: "witch_wake",
               killedTargetId: advanced.nightState.wolfKillTargetId ?? null,
+              // 解药/毒药剩余次数随私有事件下发，供 UI/AI 决定可用按钮（仅女巫可见）。
+              saveAvailable: params.witchState?.saveAvailable ?? false,
+              poisonAvailable: params.witchState?.poisonAvailable ?? false,
             },
           },
           idempotencyKey: params.idempotencyKey,

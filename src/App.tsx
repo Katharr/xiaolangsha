@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 
 import "./App.css";
-import { MVP_5P_BOARD_ID } from "./rules";
+import { STANDARD_BOARD_ID } from "./rules";
 import type { GameAction } from "./shared";
 import type { GameStore } from "./store";
 import {
@@ -142,7 +142,7 @@ export function App({ store }: AppProps) {
             vi={vi}
             busy={busy}
             humanPlayerId={HUMAN_PLAYER_ID}
-            boardId={MVP_5P_BOARD_ID}
+            boardId={STANDARD_BOARD_ID}
             nextKey={nextKey}
             act={act}
           />

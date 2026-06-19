@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import { getBoardConfig } from "../rules";
 import type {
   GameAction,
   GamePhase,
@@ -9,6 +10,38 @@ import type {
 } from "../shared";
 
 import { ROLE_LABEL } from "./labels";
+
+/** 女巫从自己的私有 witch_wake 事件里读出今晚被刀者与解药/毒药剩余。 */
+type WitchWake = {
+  killedTargetId: string | null;
+  saveAvailable: boolean;
+  poisonAvailable: boolean;
+};
+
+function readWitchWake(vi: VisibleInformationSnapshot | null): WitchWake | null {
+  if (!vi) {
+    return null;
+  }
+  for (const event of [...vi.privateEvents].reverse()) {
+    const result = event.payload.result as
+      | {
+          kind?: unknown;
+          killedTargetId?: unknown;
+          saveAvailable?: unknown;
+          poisonAvailable?: unknown;
+        }
+      | undefined;
+    if (result && result.kind === "witch_wake") {
+      return {
+        killedTargetId:
+          typeof result.killedTargetId === "string" ? result.killedTargetId : null,
+        saveAvailable: result.saveAvailable === true,
+        poisonAvailable: result.poisonAvailable === true,
+      };
+    }
+  }
+  return null;
+}
 
 export type ActionAreaProps = {
   phase: GamePhase | null;
@@ -21,7 +54,9 @@ export type ActionAreaProps = {
   act: (action: GameAction) => void;
 };
 
-const SETUP_ROLES: Role[] = ["werewolf", "seer", "villager"];
+const DEFAULT_SETUP_ROLES: Role[] = ["werewolf", "seer", "villager"];
+
+type WitchMode = "save" | "poison" | "skip";
 
 /**
  * 结构化操作区：按 gamePhase × humanParticipationState 渲染当前合法动作按钮，
@@ -40,11 +75,19 @@ export function ActionArea({
 }: ActionAreaProps) {
   const [selectedRole, setSelectedRole] = useState<Role>("villager");
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  const [witchMode, setWitchMode] = useState<WitchMode | null>(null);
 
-  // 相位切换时清掉上一相位残留的目标选择。
+  // 相位切换时清掉上一相位残留的目标 / 女巫用药选择。
   useEffect(() => {
     setSelectedTarget(null);
+    setWitchMode(null);
   }, [phase, vi?.generatedAtSeq]);
+
+  // 自由局身份选择列表来自当前板（去重）；无板时退回默认三选一。
+  const setupRoles: Role[] = (() => {
+    const board = getBoardConfig(boardId);
+    return board ? [...new Set(board.roles)] : DEFAULT_SETUP_ROLES;
+  })();
 
   const labelOf = (id: string): string => {
     const found =
@@ -153,7 +196,7 @@ export function ActionArea({
         <>
           <p className="action-hint">选择你的身份（自由局）：</p>
           <div className="action-row">
-            {SETUP_ROLES.map((role) => (
+            {setupRoles.map((role) => (
               <button
                 type="button"
                 key={role}
@@ -200,13 +243,122 @@ export function ActionArea({
       );
 
     case "night_action": {
-      const action = vi?.legalActions.find(
-        (a) => a.actionType === "werewolf_kill" || a.actionType === "seer_check",
-      );
+      const action = vi?.legalActions[0];
       if (!action || !vi?.canAct) {
         return wrap(<p className="action-hint">天黑请闭眼，等待夜晚行动结算…</p>);
       }
-      const verb = action.actionType === "werewolf_kill" ? "击杀" : "查验";
+
+      // 女巫：读 witch_wake 私有事件得知被刀者，三选一（救 X / 毒谁 / 放弃）。
+      if (action.actionType === "witch_action") {
+        const wake = readWitchWake(vi);
+        const killed = wake?.killedTargetId ?? null;
+        // 首夜自救受板规限制：被刀者是自己且为首夜时不提供解药（与规则层一致）。
+        const selfSaveFirstNight =
+          killed !== null && killed === vi.viewerId && vi.round.night === 1;
+        const canSave = Boolean(killed) && wake?.saveAvailable === true && !selfSaveFirstNight;
+        const canPoison = wake?.poisonAvailable === true;
+
+        const submitWitch = () => {
+          if (witchMode === "save") {
+            act({
+              type: "submit_witch_action",
+              idempotencyKey: nextKey("witch"),
+              actorId: humanPlayerId,
+              witchChoice: "save",
+            });
+          } else if (witchMode === "poison" && selectedTarget) {
+            act({
+              type: "submit_witch_action",
+              idempotencyKey: nextKey("witch"),
+              actorId: humanPlayerId,
+              witchChoice: "poison",
+              targetId: selectedTarget,
+            });
+          } else if (witchMode === "skip") {
+            act({
+              type: "submit_witch_action",
+              idempotencyKey: nextKey("witch"),
+              actorId: humanPlayerId,
+              witchChoice: "skip",
+            });
+          }
+        };
+
+        const submitDisabled =
+          busy ||
+          witchMode === null ||
+          (witchMode === "poison" && !selectedTarget);
+
+        return wrap(
+          <>
+            <p className="action-hint">
+              {killed
+                ? `今晚 ${labelOf(killed)} 倒牌了。你是女巫，请决定用药：`
+                : "今晚无人被狼人击杀。你是女巫，请决定用药："}
+            </p>
+            <div className="action-row">
+              {canSave ? (
+                <button
+                  type="button"
+                  className={witchMode === "save" ? "target selected" : "target"}
+                  disabled={busy}
+                  onClick={() => {
+                    setWitchMode("save");
+                    setSelectedTarget(null);
+                  }}
+                >
+                  用解药救{killed ? labelOf(killed) : ""}
+                </button>
+              ) : null}
+              {canPoison ? (
+                <button
+                  type="button"
+                  className={witchMode === "poison" ? "target selected" : "target"}
+                  disabled={busy}
+                  onClick={() => {
+                    setWitchMode("poison");
+                    setSelectedTarget(null);
+                  }}
+                >
+                  用毒药毒人
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={witchMode === "skip" ? "target selected" : "target"}
+                disabled={busy}
+                onClick={() => {
+                  setWitchMode("skip");
+                  setSelectedTarget(null);
+                }}
+              >
+                不使用
+              </button>
+            </div>
+            {witchMode === "poison" ? (
+              <>
+                <p className="action-hint">选择要毒杀的目标：</p>
+                {targetButtons(action.legalTargets)}
+              </>
+            ) : null}
+            <button type="button" disabled={submitDisabled} onClick={submitWitch}>
+              确认用药
+            </button>
+          </>,
+        );
+      }
+
+      // 守卫 / 狼人 / 预言家：单目标 + 提交 submit_night_action。
+      const nightActionType = action.actionType as
+        | "werewolf_kill"
+        | "seer_check"
+        | "guard_protect";
+      const verb =
+        nightActionType === "werewolf_kill"
+          ? "击杀"
+          : nightActionType === "seer_check"
+            ? "查验"
+            : "守护";
       return wrap(
         <>
           <p className="action-hint">选择今晚要{verb}的目标：</p>
@@ -220,13 +372,56 @@ export function ActionArea({
                 type: "submit_night_action",
                 idempotencyKey: nextKey("night"),
                 actorId: humanPlayerId,
-                actionType: action.actionType as "werewolf_kill" | "seer_check",
+                actionType: nightActionType,
                 targetId: selectedTarget,
               })
             }
           >
             提交夜晚行动
           </button>
+        </>,
+      );
+    }
+
+    case "hunter_shoot": {
+      const action = vi?.legalActions.find((a) => a.actionType === "hunter_shoot");
+      if (!action || !vi?.canAct) {
+        return wrap(<p className="action-hint">等待猎人开枪…</p>);
+      }
+      return wrap(
+        <>
+          <p className="action-hint">你是猎人，可开枪带走一名玩家（也可放弃）：</p>
+          {targetButtons(action.legalTargets)}
+          <div className="action-row">
+            <button
+              type="button"
+              disabled={busy || !selectedTarget}
+              onClick={() =>
+                selectedTarget &&
+                act({
+                  type: "submit_hunter_shoot",
+                  idempotencyKey: nextKey("hunter"),
+                  actorId: humanPlayerId,
+                  targetId: selectedTarget,
+                })
+              }
+            >
+              开枪
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                act({
+                  type: "submit_hunter_shoot",
+                  idempotencyKey: nextKey("hunter"),
+                  actorId: humanPlayerId,
+                })
+              }
+            >
+              不开枪
+            </button>
+          </div>
         </>,
       );
     }
