@@ -111,6 +111,23 @@ function NoticeRow({ message }: { message: ChatMessage }) {
 }
 
 function ThinkingBubble({ thinking }: { thinking: ThinkingState }) {
+  // 夜晚匿名：只显示「天黑请闭眼」通用提示，不暴露行动者身份。
+  if (thinking.anonymous) {
+    return (
+      <div className="chat-notice chat-notice-host chat-notice-night" aria-label="夜晚行动中">
+        <span className="chat-notice-tag">夜晚</span>
+        <span className="chat-notice-text">
+          天黑请闭眼，夜晚行动进行中
+          <span className="chat-typing">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   const color = seatColor(thinking.seat);
   const task = TASK_THINKING_LABEL[thinking.taskType] ?? "行动";
   return (

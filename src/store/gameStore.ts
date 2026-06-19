@@ -29,11 +29,15 @@ import type { DriverState, InGameTaskType } from "./driver";
 import { runAiDriver } from "./driver";
 import { deriveMessages, type ChatMessage } from "./messages";
 
-/** 当前正在「思考」的 AI 行动者（供 UI 显示打字指示）。无人思考时为 null。 */
+/**
+ * 当前正在「思考」的 AI 行动者（供 UI 显示打字指示）。无人思考时为 null。
+ * 夜晚行动对非行动者匿名（anonymous:true，不带 name/seat），避免泄露谁是狼/神（ISO-001）。
+ */
 export type ThinkingState = {
-  name: string;
-  seat: number;
+  name?: string;
+  seat?: number;
   taskType: InGameTaskType;
+  anonymous?: boolean;
 };
 
 export type GameStoreDeps = {
@@ -148,9 +152,17 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         now: nowProvider,
         onStep: commit,
         onActorThinking: ({ actorId, taskType }) => {
-          const player = get().snapshot?.players.find(
+          const snapshot = get().snapshot;
+          const player = snapshot?.players.find(
             (candidate) => candidate.playerId === actorId,
           );
+          // 夜晚行动对非真人匿名：只暴露「夜里有人在行动」，绝不暴露是谁（防泄狼/神身份）。
+          const isNight = snapshot?.gamePhase === "night_action";
+          const isHuman = player?.isHuman ?? false;
+          if (isNight && !isHuman) {
+            set({ thinking: { taskType, anonymous: true } });
+            return;
+          }
           set({
             thinking: player
               ? { name: player.name, seat: player.seat, taskType }
