@@ -173,17 +173,111 @@ function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] 
     ];
   }
 
+  if (snapshot.gamePhase === "day_announcement") {
+    return [
+      {
+        actionType: "confirm",
+        actorId: viewer.playerId,
+        legalTargets: [],
+        allowAbstain: false,
+        required: true,
+      },
+    ];
+  }
+
+  if (snapshot.gamePhase === "day_speech") {
+    return [
+      {
+        actionType: "speech",
+        actorId: viewer.playerId,
+        legalTargets: [],
+        allowAbstain: false,
+        required: true,
+      },
+    ];
+  }
+
+  if (snapshot.gamePhase === "vote" || snapshot.gamePhase === "tie_vote") {
+    const voteState = snapshot.voteState;
+
+    if (!voteState) {
+      return [];
+    }
+
+    return [
+      {
+        actionType: "vote",
+        actorId: viewer.playerId,
+        legalTargets: voteState.candidateIds.filter(
+          (candidateId) => candidateId !== viewer.playerId,
+        ),
+        allowAbstain: voteState.allowAbstain,
+        required: true,
+      },
+    ];
+  }
+
+  if (snapshot.gamePhase === "tie_speech") {
+    return [
+      {
+        actionType: "tie_speech",
+        actorId: viewer.playerId,
+        legalTargets: [],
+        allowAbstain: false,
+        required: true,
+      },
+    ];
+  }
+
+  if (snapshot.gamePhase === "exile_last_words") {
+    return [
+      {
+        actionType: "last_words",
+        actorId: viewer.playerId,
+        legalTargets: [],
+        allowAbstain: false,
+        required: true,
+      },
+    ];
+  }
+
   return [];
 }
 
 function canViewerAct(viewer: Player, snapshot: GameSnapshot): boolean {
+  // The exiled player gives last words after they are already dead, so this
+  // case must be handled before the generic alive guard below.
+  if (snapshot.gamePhase === "exile_last_words") {
+    return snapshot.pendingAction?.actorId === viewer.playerId;
+  }
+
+  if (!viewer.alive) {
+    return false;
+  }
+
+  if (viewer.isHuman && snapshot.humanParticipationState !== "alive") {
+    return false;
+  }
+
   if (snapshot.gamePhase === "night_action") {
     return (
-      viewer.alive &&
       (viewer.role === "werewolf" || viewer.role === "seer") &&
       Boolean(snapshot.nightState?.requiredActorIds.includes(viewer.playerId)) &&
       !snapshot.nightState?.resolved &&
       !snapshot.nightState?.submittedActorIds.includes(viewer.playerId)
+    );
+  }
+
+  if (snapshot.gamePhase === "vote" || snapshot.gamePhase === "tie_vote") {
+    const voteState = snapshot.voteState;
+
+    if (!voteState || voteState.resolved) {
+      return false;
+    }
+
+    return (
+      voteState.eligibleVoterIds.includes(viewer.playerId) &&
+      !voteState.submittedVoterIds.includes(viewer.playerId)
     );
   }
 
