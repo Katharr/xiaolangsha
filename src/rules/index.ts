@@ -84,6 +84,10 @@ export function applyAction(
       return submitTieSpeech(validAction, context, previousEvents);
     case "submit_last_words":
       return submitLastWords(validAction, context, previousEvents);
+    case "request_fast_forward":
+      return requestFastForward(validAction, context, previousEvents);
+    case "confirm_new_game":
+      return confirmNewGame(validAction, context, previousEvents);
     default:
       return rulesError("ACTION_NOT_ALLOWED", "Action is not allowed in this slice.");
   }
@@ -740,13 +744,19 @@ function confirmDayAnnouncement(
   const humanPlayer = context.snapshot.players.find(
     (player) => player.playerId === action.playerId,
   );
+  const participation = context.snapshot.humanParticipationState;
+  // An alive human confirms during normal play; once the human is dead and
+  // fast-forwarding, the store re-issues this confirmation on their behalf so
+  // the day announcement does not deadlock with no living confirmer.
+  const isAliveHumanTurn =
+    humanPlayer?.isHuman && humanPlayer.alive && participation === "alive";
+  const isFastForward = participation === "fast_forwarded";
 
   if (
     context.snapshot.gamePhase !== "day_announcement" ||
     context.session.humanPlayerId !== action.playerId ||
     !humanPlayer?.isHuman ||
-    !humanPlayer.alive ||
-    context.snapshot.humanParticipationState !== "alive"
+    !(isAliveHumanTurn || isFastForward)
   ) {
     return rulesError("ACTION_NOT_ALLOWED", "Day announcement cannot be confirmed now.");
   }
@@ -1757,6 +1767,153 @@ function getCurrentVoteSubmissions(
 
     return event ? [event] : [];
   });
+}
+
+function requestFastForward(
+  action: Extract<GameAction, { type: "request_fast_forward" }>,
+  context: RuleEngineContext,
+  previousEvents: TruthEvent[],
+): Result<RuleEngineSuccess> {
+  if (!context.session || !context.snapshot) {
+    return rulesError("INVALID_ACTION", "Fast forward requires an existing game.");
+  }
+
+  const snapshot = context.snapshot;
+  const human = snapshot.players.find((player) => player.isHuman);
+
+  // Only the human, only once they are dead and still spectating. The engine
+  // never simulates here; flipping participation to "fast_forwarded" tells the
+  // store to drive the remaining AI turns (and re-issue day-announcement
+  // confirmations) until the game reaches review.
+  if (
+    context.session.humanPlayerId !== action.playerId ||
+    !human ||
+    human.alive ||
+    snapshot.humanParticipationState !== "dead_spectating"
+  ) {
+    return rulesError("ACTION_NOT_ALLOWED", "Fast forward is not allowed now.");
+  }
+
+  const nextSeq = snapshot.lastEventSeq + 1;
+  const event = buildEvent({
+    gameId: context.session.gameId,
+    seq: nextSeq,
+    type: "fast_forward_requested",
+    phase: snapshot.gamePhase,
+    source: "human",
+    actorId: action.playerId,
+    payload: {
+      playerId: action.playerId,
+      fromPhase: snapshot.gamePhase,
+    },
+    idempotencyKey: action.idempotencyKey,
+    now: context.now,
+    round: snapshot.round,
+    visibility: {
+      public: false,
+      visibleTo: [action.playerId],
+      revealInReview: true,
+    },
+  });
+  const nextSnapshot: GameSnapshot = {
+    ...snapshot,
+    lastEventSeq: nextSeq,
+    humanParticipationState: "fast_forwarded",
+  };
+  const session = updateSessionSeq(context.session, nextSnapshot);
+
+  return ok({
+    session,
+    events: [event],
+    snapshot: nextSnapshot,
+    visibleInformation: buildVisibleInformation(action.playerId, nextSnapshot, [
+      ...previousEvents,
+      event,
+    ]),
+    nextPendingAction: nextSnapshot.pendingAction,
+  });
+}
+
+function confirmNewGame(
+  action: Extract<GameAction, { type: "confirm_new_game" }>,
+  context: RuleEngineContext,
+  _previousEvents: TruthEvent[],
+): Result<RuleEngineSuccess> {
+  if (!context.session || !context.snapshot) {
+    return rulesError("INVALID_ACTION", "Starting a new game requires an existing game.");
+  }
+
+  if (context.snapshot.gamePhase !== "review") {
+    return rulesError("ACTION_NOT_ALLOWED", "A new game can only be started from review.");
+  }
+
+  if (context.session.humanPlayerId !== action.playerId) {
+    return rulesError("ACTION_NOT_ALLOWED", "Only the human may start a new game.");
+  }
+
+  const nextSeq = context.snapshot.lastEventSeq + 1;
+  const event = buildEvent({
+    gameId: context.session.gameId,
+    seq: nextSeq,
+    type: "phase_changed",
+    phase: "review",
+    source: "human",
+    actorId: action.playerId,
+    payload: {
+      fromPhase: "review",
+      toPhase: "mode_select",
+      reason: "new_game_confirmed",
+    },
+    idempotencyKey: action.idempotencyKey,
+    now: context.now,
+    round: context.snapshot.round,
+    visibility: { public: true, visibleTo: [], revealInReview: false },
+  });
+  const snapshot: GameSnapshot = {
+    gameId: context.session.gameId,
+    lastEventSeq: nextSeq,
+    gamePhase: "mode_select",
+    humanParticipationState: "alive",
+    round: { night: 0, day: 0, voteRound: "none" },
+    players: [],
+    pendingAction: null,
+  };
+  const session = updateSessionSeq(context.session, snapshot);
+
+  return ok({
+    session,
+    events: [event],
+    snapshot,
+    // players is empty here, so buildVisibleInformation would throw; the store
+    // clears storage on this result and waits for the next create_game.
+    visibleInformation: buildEmptyModeSelectVisibleInformation(action.playerId, snapshot),
+    nextPendingAction: snapshot.pendingAction,
+  });
+}
+
+function buildEmptyModeSelectVisibleInformation(
+  viewerId: string,
+  snapshot: GameSnapshot,
+): VisibleInformationSnapshot {
+  return {
+    gameId: snapshot.gameId,
+    viewerId,
+    generatedAtSeq: snapshot.lastEventSeq,
+    gamePhase: snapshot.gamePhase,
+    humanParticipationState: snapshot.humanParticipationState,
+    round: snapshot.round,
+    ownSeat: 1,
+    ownRole: "villager",
+    ownFaction: "good_team",
+    alivePlayers: [],
+    deadPlayers: [],
+    publicEvents: [],
+    privateEvents: [],
+    speeches: [],
+    votes: [],
+    legalActions: [],
+    canAct: false,
+  };
 }
 
 function buildNoopResult(
