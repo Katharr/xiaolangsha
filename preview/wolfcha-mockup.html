@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 前端视觉预览（wolfcha 风格）</title>
+<style>
+  /* ===========================================================
+     这是【纯静态视觉预览】，硬编码假数据，不接 store / AI / src。
+     用途：在动真格重构前，目测拍板「深色复古 + 环形牌桌」方向。
+     设计 token 全部用 CSS 变量，正式落地时会原样搬进 src/ui/theme.css。
+     =========================================================== */
+
+  :root {
+    /* 背景层级（深色复古：暖褐黑） */
+    --bg-0: #14110c;          /* 最底 */
+    --bg-1: #1c1813;          /* 牌桌区 */
+    --bg-2: #241f18;          /* 面板/气泡 */
+    --bg-3: #2e2820;          /* 抬升面 */
+    --line: #3a3328;          /* 描边 */
+
+    /* 文本 */
+    --ink: #ece3d0;           /* 主文本（米白） */
+    --ink-dim: #b3a78d;       /* 次要 */
+    --ink-faint: #7d745f;     /* 最弱 */
+
+    /* 强调（金 / 暖） */
+    --gold: #d8b25a;
+    --gold-soft: #b8954a;
+    --danger: #c0563f;
+    --good: #6fae8f;
+
+    /* 座位 6 色（深色背景下提亮） */
+    --seat-1: #6fae8f;
+    --seat-2: #d59a4e;
+    --seat-3: #5b91c9;
+    --seat-4: #b07cc4;
+    --seat-5: #d4685a;
+    --seat-6: #44b2a6;
+
+    --radius: 14px;
+    --radius-sm: 9px;
+    --gap: 12px;
+    --shadow: 0 6px 22px rgba(0,0,0,.45);
+    --t-fast: .18s;
+    --t-mid: .35s;
+
+    --serif: "Songti SC", "STSong", Georgia, "Times New Roman", serif;
+    --sans: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+
+  /* 白天主题：整体保持暗，但更暖、更亮一档 */
+  body.is-day {
+    --bg-0: #1c1810;
+    --bg-1: #28221a;
+    --bg-2: #322a20;
+    --bg-3: #3b3226;
+    --ink: #f4ecda;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #2a2418 0%, transparent 60%),
+      var(--bg-0);
+    color: var(--ink);
+    font-family: var(--sans);
+    transition: background var(--t-mid) ease, color var(--t-mid) ease;
+  }
+
+  /* ============ 预览控制条（仅 demo，正式版没有） ============ */
+  .demo-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 14px; background: #0d0b07; border-bottom: 1px solid var(--line);
+    font-size: 13px; color: var(--ink-dim);
+  }
+  .demo-bar strong { color: var(--gold); font-weight: 600; }
+  .demo-bar .spacer { flex: 1; }
+  .demo-bar button {
+    font: inherit; cursor: pointer; padding: 5px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg-3); color: var(--ink);
+  }
+  .demo-bar button:hover { border-color: var(--gold-soft); color: var(--gold); }
+
+  /* ============ 游戏外壳 ============ */
+  .frame {
+    max-width: 880px; margin: 0 auto; min-height: calc(100% - 39px);
+    display: grid; grid-template-rows: auto auto 1fr auto;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--bg-0), var(--bg-1));
+  }
+
+  /* 顶部细条 */
+  .topbar {
+    display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); background: rgba(0,0,0,.25);
+  }
+  .topbar .phase { font-family: var(--serif); font-size: 18px; letter-spacing: 2px; color: var(--gold); }
+  .topbar .round { color: var(--ink-dim); font-size: 14px; }
+  .topbar .role { margin-left: auto; font-size: 14px; }
+  .topbar .role b { color: var(--gold); }
+  .topbar .tag {
+    font-size: 12px; padding: 2px 9px; border-radius: 10px;
+    background: #4a2f2a; color: #e7b3a6; border: 1px solid #5e3a33;
+  }
+
+  /* ============ 环形牌桌 ============ */
+  .table-wrap {
+    position: relative; padding: 18px 18px 6px;
+  }
+  .table {
+    position: relative; width: 100%;
+    aspect-ratio: 16 / 10;
+    max-height: 360px;
+    margin: 0 auto;
+  }
+  /* 桌面圆毡 */
+  .felt {
+    position: absolute; inset: 8%;
+    border-radius: 50%;
+    background:
+      radial-gradient(closest-side, #2b3a2f 0%, #223026 70%, #1b271e 100%);
+    border: 1px solid #34433a;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.55), var(--shadow);
+  }
+  body.is-day .felt {
+    background: radial-gradient(closest-side, #34442f 0%, #2a3826 70%, #232f20 100%);
+  }
+
+  /* 中央舞台 */
+  .stage {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 40%; max-width: 230px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .stage .orb {
+    width: 46px; height: 46px; border-radius: 50%; margin-bottom: 2px;
+    background: radial-gradient(circle at 35% 30%, #e7d9a6, #b9933f);
+    box-shadow: 0 0 24px rgba(216,178,90,.5);
+    transition: var(--t-mid);
+  }
+  body:not(.is-day) .stage .orb {
+    background: radial-gradient(circle at 35% 30%, #cfd6e6, #6b7691);
+    box-shadow: 0 0 26px rgba(140,160,210,.45);
+  }
+  .stage .stage-phase { font-family: var(--serif); font-size: 20px; letter-spacing: 3px; color: var(--gold); }
+  .stage .stage-hint { font-size: 12.5px; color: var(--ink-dim); line-height: 1.5; }
+
+  /* 座位 */
+  .seat {
+    position: absolute; transform: translate(-50%,-50%);
+    width: 92px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    text-align: center;
+  }
+  .seat .avatar {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--bg-3); border: 2px solid var(--line);
+    overflow: hidden; position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    transition: var(--t-fast);
+  }
+  .seat .avatar img { width: 100%; height: 100%; display: block; }
+  .seat .nm { font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+  .seat .nm .no { color: var(--ink-faint); }
+  .seat .st { font-size: 11px; color: var(--ink-faint); }
+
+  /* 你 / 狼队友 角标 */
+  .seat .badge {
+    position: absolute; top: -4px; right: -4px;
+    font-size: 10px; padding: 0 5px; border-radius: 8px; line-height: 16px;
+    border: 1px solid var(--line);
+  }
+  .seat .badge.you { background: var(--gold); color: #2a210c; border-color: var(--gold); }
+  .seat .badge.wolf { background: #4a2622; color: #e9a99c; border-color: #6a382f; }
+
+  /* 当前发言者：金色光晕 + 缩放 */
+  .seat.speaking .avatar {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(216,178,90,.35), 0 0 18px rgba(216,178,90,.55);
+    transform: scale(1.08);
+  }
+  .seat.speaking .st { color: var(--gold); }
+  .seat.speaking .nm { color: var(--gold); }
+
+  /* 死亡：灰化 + 划除 */
+  .seat.dead .avatar { filter: grayscale(1) brightness(.5); border-color: #2c2820; }
+  .seat.dead .avatar::after {
+    content: "✕"; position: absolute; inset: 0; display: grid; place-items: center;
+    color: rgba(220,90,70,.85); font-size: 26px; font-weight: 700;
+  }
+  .seat.dead .nm { color: var(--ink-faint); text-decoration: line-through; }
+  .seat.dead .st { color: #8a4036; }
+
+  /* ============ 发言流面板 ============ */
+  .stream-wrap { padding: 4px 16px 12px; min-height: 0; }
+  .stream {
+    background: rgba(0,0,0,.18); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; max-height: 230px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 11px;
+  }
+  .row { display: flex; gap: 9px; align-items: flex-start; max-width: 86%; }
+  .row.self { align-self: flex-end; flex-direction: row-reverse; }
+  .row .av { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; overflow: hidden;
+             border: 1px solid var(--line); background: var(--bg-3); }
+  .row .av img { width: 100%; height: 100%; display: block; }
+  .bubble {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 7px 12px; line-height: 1.55;
+  }
+  .row.self .bubble { background: #2f3a2a; border-color: #41502f; }
+  .bubble .who { font-size: 11.5px; font-weight: 600; margin-bottom: 1px; }
+  .bubble .tx { font-size: 14px; color: var(--ink); white-space: pre-wrap; }
+
+  .notice {
+    align-self: center; max-width: 94%; display: flex; gap: 8px; align-items: baseline;
+    padding: 6px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--ink-dim);
+  }
+  .notice .ntag { flex: 0 0 auto; font-size: 10.5px; font-weight: 700; color: var(--ink-faint); }
+  .notice.host { background: #20281f; border-color: #344029; }
+  .notice.private { background: #2c2615; border-color: #4a3f1d; color: #e7d29a; }
+  .notice.vote { background: #1d2530; border-color: #2f3f55; color: #b9cbe2; }
+
+  /* 思考中 */
+  .typing { display: inline-flex; gap: 3px; align-items: center; font-style: italic; color: var(--ink-faint); font-size: 13px; }
+  .typing .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold-soft); animation: blink 1.2s infinite both; }
+  .typing .dot:nth-child(2){ animation-delay:.2s } .typing .dot:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
+
+  /* ============ 操作区 + 输入 ============ */
+  .controls { border-top: 1px solid var(--line); background: rgba(0,0,0,.22); padding: 12px 16px 14px; }
+  .hint { margin: 0 0 9px; font-size: 13.5px; color: var(--ink-dim); }
+  .btns { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 10px; }
+  .btn {
+    font: inherit; cursor: pointer; padding: 8px 16px; border-radius: var(--radius-sm);
+    border: 1px solid var(--gold-soft); color: #2a210c; font-weight: 600;
+    background: linear-gradient(180deg,#d8b25a,#b8954a);
+  }
+  .btn.ghost { background: var(--bg-3); color: var(--ink); border-color: var(--line); font-weight: 500; }
+  .btn.ghost.on { border-color: var(--gold); color: var(--gold); }
+  .input { display: flex; gap: 10px; align-items: flex-end; }
+  .input textarea {
+    flex: 1; min-height: 46px; resize: vertical; padding: 9px 11px; font: inherit;
+    border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg-1); color: var(--ink);
+  }
+  .input textarea::placeholder { color: var(--ink-faint); }
+
+  /* ============ 天黑/天亮 过场（眨眼 + 字幕） ============ */
+  .transition { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+  .lid { position: absolute; left: 0; width: 100%; height: 0; background: #07060a; transition: height .55s cubic-bezier(.7,0,.3,1); }
+  .lid.top { top: 0; } .lid.bottom { bottom: 0; }
+  .caption {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-family: var(--serif); font-size: 40px; letter-spacing: 12px; color: #e9dcb4;
+    opacity: 0; transition: opacity .4s ease; text-shadow: 0 0 30px rgba(0,0,0,.8);
+  }
+  .transition.run .lid { height: 52%; }
+  .transition.run .caption { opacity: 1; }
+
+  .stream::-webkit-scrollbar { width: 8px; }
+  .stream::-webkit-scrollbar-thumb { background: #3a3328; border-radius: 8px; }
+</style>
+</head>
+<body class="is-day">
+
+  <!-- 预览控制条（仅 demo） -->
+  <div class="demo-bar">
+    <strong>视觉预览</strong> · 硬编码假数据，不接逻辑
+    <span class="spacer"></span>
+    <button id="btn-cycle">切换 天黑 / 天亮（看过场动画）</button>
+    <button id="btn-count">切到 5 人板（验证不崩）</button>
+  </div>
+
+  <div class="frame">
+    <!-- 顶部细条 -->
+    <div class="topbar">
+      <span class="phase" id="tb-phase">白天 · 发言</span>
+      <span class="round" id="tb-round">第 2 天</span>
+      <span class="role">你是：<b>预言家</b></span>
+      <span class="tag" style="display:none">旁观中</span>
+    </div>
+
+    <!-- 环形牌桌 -->
+    <div class="table-wrap">
+      <div class="table" id="table">
+        <div class="felt"></div>
+        <div class="stage">
+          <div class="orb"></div>
+          <div class="stage-phase" id="stage-phase">第 2 天</div>
+          <div class="stage-hint" id="stage-hint">天亮了，请依次发言。<br>轮到 <b style="color:var(--gold)">小满（2号）</b> 发言。</div>
+        </div>
+        <!-- 座位由 JS 注入 -->
+      </div>
+    </div>
+
+    <!-- 发言流 -->
+    <div class="stream-wrap">
+      <div class="stream" id="stream">
+        <div class="notice host"><span class="ntag">主持人</span><span>天亮了。昨晚 <b>林夜（4号）</b> 夜里出局。</span></div>
+        <div class="notice private"><span class="ntag">仅你可见</span><span>你查验了 沈舟（5号），结果为：狼人。</span></div>
+
+        <div class="row">
+          <span class="av"><img alt="" data-seed="qiao" /></span>
+          <div class="bubble">
+            <div class="who" style="color:var(--seat-1)">乔木（1号）</div>
+            <div class="tx">昨晚平安……不对，4号出局了。我先说说我的视角，昨天我观察 5 号发言一直在带节奏。</div>
+          </div>
+        </div>
+
+        <div class="row self">
+          <span class="av"><img alt="" data-seed="you" /></span>
+          <div class="bubble">
+            <div class="who" style="color:var(--gold)">你（3号）</div>
+            <div class="tx">我是预言家，昨晚验了 5 号 —— 查杀。请大家相信我，今天票出 5 号。</div>
+          </div>
+        </div>
+
+        <div class="notice vote"><span class="ntag">投票</span><span>上一轮：阿岚（6号）→ 沈舟（5号），乔木（1号）→ 沈舟（5号）…</span></div>
+
+        <!-- 当前发言者思考 -->
+        <div class="row">
+          <span class="av"><img alt="" data-seed="man" /></span>
+          <div class="bubble">
+            <div class="who" style="color:var(--seat-2)">小满（2号）</div>
+            <div class="typing">正在发言<span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作区 + 输入 -->
+    <div class="controls">
+      <p class="hint">轮到你发言。组织你的发言，或先听别人说。</p>
+      <div class="btns">
+        <button class="btn">发送发言</button>
+        <button class="btn ghost">跳过 / 稍后</button>
+        <button class="btn ghost on">查看场上信息</button>
+      </div>
+      <div class="input">
+        <textarea placeholder="输入你的发言…（预览仅展示样式，不可真正提交）"></textarea>
+        <button class="btn">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 过场 -->
+  <div class="transition" id="transition">
+    <div class="lid top"></div>
+    <div class="lid bottom"></div>
+    <div class="caption" id="caption">第三夜</div>
+  </div>
+
+<script>
+  // DiceBear 在线头像（adventurer 风格），seed 决定长相、整局稳定。
+  const AV = (seed) => `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
+  document.querySelectorAll('img[data-seed]').forEach(img => img.src = AV(img.dataset.seed));
+
+  // ---- 假局数据 ----
+  const SEAT_COLORS = ['--seat-1','--seat-2','--seat-3','--seat-4','--seat-5','--seat-6'];
+  const PLAYERS_7 = [
+    { seat:1, name:'乔木', seed:'qiao', state:'alive' },
+    { seat:2, name:'小满', seed:'man',  state:'speaking' },     // 当前发言者
+    { seat:3, name:'你',   seed:'you',  state:'alive', you:true },
+    { seat:4, name:'林夜', seed:'lin',  state:'dead' },          // 昨晚出局
+    { seat:5, name:'沈舟', seed:'shen', state:'alive', wolf:true },
+    { seat:6, name:'阿岚', seed:'lan',  state:'alive' },
+    { seat:7, name:'白露', seed:'bai',  state:'alive' },
+  ];
+  const PLAYERS_5 = PLAYERS_7.slice(0,5);
+
+  const table = document.getElementById('table');
+
+  function layout(players) {
+    // 清掉旧座位（保留 felt + stage）
+    table.querySelectorAll('.seat').forEach(n => n.remove());
+    const n = players.length;
+    players.forEach((p, i) => {
+      // 从正上方开始，顺时针均分 —— 角度只由 total 决定，5/7/任意人数都不崩。
+      const ang = -90 + i * 360 / n;
+      const rad = ang * Math.PI / 180;
+      const Rx = 46, Ry = 44;                  // 椭圆半径（百分比）
+      const x = 50 + Rx * Math.cos(rad);
+      const y = 50 + Ry * Math.sin(rad);
+      const color = `var(${SEAT_COLORS[(p.seat-1) % SEAT_COLORS.length]})`;
+
+      const el = document.createElement('div');
+      el.className = 'seat' + (p.state==='dead'?' dead':'') + (p.state==='speaking'?' speaking':'');
+      el.style.left = x + '%';
+      el.style.top = y + '%';
+      el.innerHTML = `
+        <div class="avatar">
+          <img alt="" src="${AV(p.seed)}" />
+          ${p.you ? '<span class="badge you">你</span>' : (p.wolf ? '<span class="badge wolf">狼</span>' : '')}
+        </div>
+        <div class="nm" style="${p.state!=='dead'?`color:${color}`:''}">${p.name}<span class="no">（${p.seat}号）</span></div>
+        <div class="st">${p.state==='dead'?'出局':(p.state==='speaking'?'发言中':'存活')}</div>
+      `;
+      table.appendChild(el);
+    });
+  }
+  layout(PLAYERS_7);
+
+  // ---- 5/7 人切换（演示「不崩」）----
+  let count = 7;
+  document.getElementById('btn-count').addEventListener('click', (e) => {
+    count = count === 7 ? 5 : 7;
+    layout(count === 7 ? PLAYERS_7 : PLAYERS_5);
+    e.target.textContent = count === 7 ? '切到 5 人板（验证不崩）' : '切回 7 人板';
+  });
+
+  // ---- 天黑 / 天亮 过场 ----
+  const body = document.body;
+  const tr = document.getElementById('transition');
+  const cap = document.getElementById('caption');
+  const tbPhase = document.getElementById('tb-phase');
+  const tbRound = document.getElementById('tb-round');
+  const stPhase = document.getElementById('stage-phase');
+  const stHint = document.getElementById('stage-hint');
+  let night = false, round = 2;
+
+  document.getElementById('btn-cycle').addEventListener('click', () => {
+    night = !night;
+    const label = night ? `第 ${round} 夜` : `第 ${round} 天`;
+    cap.textContent = label;
+    tr.classList.add('run');                 // 眨眼闭合 + 字幕浮现
+    setTimeout(() => {                        // 闭合到最暗时切换内容/主题
+      body.classList.toggle('is-day', !night);
+      tbPhase.textContent = night ? '夜晚 · 行动' : '白天 · 发言';
+      tbRound.textContent = label;
+      stPhase.textContent = label;
+      stHint.innerHTML = night
+        ? '天黑请闭眼，夜晚行动进行中……'
+        : '天亮了，请依次发言。';
+      if (!night) round++;
+    }, 560);
+    setTimeout(() => tr.classList.remove('run'), 1150);  // 睁眼
+  });
+</script>
+</body>
+</html>

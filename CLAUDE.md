@@ -1,6 +1,8 @@
 # CLAUDE.md — 小狼杀（langrensha / xiaolangsha）
 
 > **这是会话交接文档。新会话请先读完本文件（重点看下方「## 现状基线」的最新进度），再按需读 `docs/BUILD-PLAN.md`。M1–M6 与「阶段二重构（顺序夜晚+预女猎+屠边）」均已完成，当前在 M7：手测交付 + 打磨。**
+>
+> **🎨 进行中：前端重设计（借鉴 wolfcha，落地环形牌桌）。视觉方向已定稿（方案 C），权威计划见 `docs/FRONTEND-REDESIGN.md`，预览基准 `preview/wolfcha-mockup-balanced.html`。下一步从该文档的「阶段 0」开始。逻辑层不动，只改 UI 层。**
 
 ## 这个项目是什么
 
@@ -44,6 +46,15 @@
   2. `npm run dev` → 开 7 人标准局，验证：夜晚只见「天黑请闭眼」无姓名泄漏；真人当女巫（救X/毒谁/放弃）、猎人（开枪/不开枪）、守卫、狼时控件可用；玩到屠边结束看复盘真相。
   3. 降级测试：故意填错 key → 脚本兜底应能全程跑完到复盘不卡死。
   4. 刷新恢复（Dexie）、e2e 冒烟、UI 打磨。
+
+### 前端重设计（2026-06-21 起，进行中）
+
+- **目标**：借鉴 GitHub `oil-oil/wolfcha` 的前端视觉/交互，把朴素聊天室 UI 升级成「深色复古 + 环形牌桌」。逻辑层（store/rules/shared）一行不动，**只改 UI 层**。
+- **视觉方向已定稿 = 方案 C**（发言流主导 + 紧凑牌桌 + 当前发言者中央舞台 + 场上速览 + 一体化发言输入区）。
+- **权威计划见 `docs/FRONTEND-REDESIGN.md`**（决策、红线、设计 token、现有 UI 盘点、阶段 0~6、验证方式都在里面）。
+- **预览基准（已批准）**：`preview/wolfcha-mockup-balanced.html`（纯静态稿，双击可看；备选 A/B 两版同目录、已弃可删）。
+- **下一步 = 阶段 0**：新增 `src/ui/theme.css` 建立设计 token + 切深色主题底座（不崩、测试绿）。
+- 样式方案：**纯 CSS 变量 + Framer Motion**（不引 Tailwind/组件库）。头像用 DiceBear（`adventurer` 风格）。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 
