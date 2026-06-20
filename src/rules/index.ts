@@ -785,6 +785,9 @@ function resolveNight(params: {
     const werewolfIds = params.baseSnapshot.players
       .filter((player) => player.role === "werewolf")
       .map((player) => player.playerId);
+    // 狼刀是团队决策：记录本夜每匹狼各自投了谁（wolfVotes）及全部参与者，供复盘还原细节。
+    const wolfVotes = params.nightState.wolfVotes ?? {};
+    const actorIds = Object.keys(wolfVotes).length > 0 ? Object.keys(wolfVotes) : werewolfIds;
     events.push(
       buildEvent({
         gameId: session.gameId,
@@ -793,9 +796,11 @@ function resolveNight(params: {
         phase: "night_action",
         source: "rule_engine",
         payload: {
+          actorId: actorIds[0] ?? "",
+          actorIds,
           actionType: "werewolf_kill",
           targetId: wolfKillTargetId,
-          result: { kind: "kill_result", targetId: wolfKillTargetId, killed },
+          result: { kind: "kill_result", targetId: wolfKillTargetId, killed, wolfVotes },
         },
         idempotencyKey: params.idempotencyKey,
         now,

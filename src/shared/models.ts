@@ -293,6 +293,8 @@ export type ReviewNightActionRef = {
   eventId: string;
   night: number;
   actorId: string;
+  /** 团队行动（狼刀）的全部参与者；个人行动留空。复盘据此展示「狼队：谁、各投谁」。 */
+  actorIds?: string[];
   actionType: Exclude<NightActionType, "none">;
   targetId?: string;
   result: Record<string, unknown>;

@@ -95,11 +95,32 @@ export function ReviewPanel({
                   : night.result?.factionResult === "good_team"
                     ? "（好人）"
                     : "";
+              // 狼刀是团队行动：展示参与的全部狼 + 各自的刀票，而非笼统的「某玩家」。
+              const actorText =
+                night.actorIds && night.actorIds.length > 0
+                  ? `狼队（${night.actorIds.map(labelOf).join("、")}）`
+                  : labelOf(night.actorId);
+              const wolfVotes =
+                night.actionType === "werewolf_kill" &&
+                night.result?.wolfVotes &&
+                typeof night.result.wolfVotes === "object"
+                  ? (night.result.wolfVotes as Record<string, string>)
+                  : null;
+              const wolfVotesText = wolfVotes
+                ? Object.entries(wolfVotes)
+                    .map(([wolfId, targetId]) => `${labelOf(wolfId)}→${labelOf(targetId)}`)
+                    .join("，")
+                : "";
+              // 狼刀是否得手（被守卫守护/女巫救则未得手），也是复盘该看到的细节。
+              const killMissed =
+                night.actionType === "werewolf_kill" && night.result?.killed === false;
               return (
                 <li key={night.eventId}>
-                  第 {night.night} 夜：{labelOf(night.actorId)} {verb}{" "}
+                  第 {night.night} 夜：{actorText} {verb}{" "}
                   {night.targetId ? labelOf(night.targetId) : "（无目标）"}
+                  {killMissed ? "（未得手）" : ""}
                   {faction}
+                  {wolfVotesText ? `（刀票：${wolfVotesText}）` : ""}
                 </li>
               );
             })}

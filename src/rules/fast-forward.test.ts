@@ -437,6 +437,19 @@ describe("P9-S11 fast forward, new game and review context", () => {
       "werewolf_kill",
     ]);
 
+    // 复盘细节：狼刀须归属到具体的狼（actorId 非空且是真实玩家、actorIds 全是狼），
+    // 不再因缺 actorId 而在 UI 退化成「某玩家」。
+    const wolfKill = context.nightActions.find(
+      (action) => action.actionType === "werewolf_kill",
+    );
+    const wolfIds = context.players
+      .filter((player) => player.role === "werewolf")
+      .map((player) => player.playerId);
+    expect(wolfKill?.actorId).toBeTruthy();
+    expect(wolfIds).toContain(wolfKill?.actorId);
+    expect(wolfKill?.actorIds?.length ?? 0).toBeGreaterThan(0);
+    expect(wolfKill?.actorIds?.every((id) => wolfIds.includes(id))).toBe(true);
+
     // Four day speeches plus the werewolf's last words.
     const daySpeeches = context.speeches.filter(
       (speech) => speech.speechKind === "day_speech",

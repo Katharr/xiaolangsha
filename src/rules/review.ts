@@ -111,11 +111,16 @@ function toReviewNightAction(event: TruthEvent): ReviewNightActionRef[] {
     return [];
   }
 
+  const actorIds = Array.isArray(event.payload.actorIds)
+    ? event.payload.actorIds.filter((id): id is string => typeof id === "string")
+    : [];
+
   return [
     {
       eventId: event.eventId,
       night: event.round.night,
       actorId: String(event.payload.actorId ?? event.actorId ?? ""),
+      ...(actorIds.length > 0 ? { actorIds } : {}),
       actionType,
       ...(typeof event.payload.targetId === "string"
         ? { targetId: event.payload.targetId }
