@@ -1601,11 +1601,8 @@ function submitVote(
     idempotencyKey: action.idempotencyKey,
     now: context.now,
     round: snapshot.round,
-    visibility: {
-      public: false,
-      visibleTo: [action.voterId],
-      revealInReview: true,
-    },
+    // 明牌投票：谁投了谁对全场公开（与 AI 看到的 votes 一致），方便人类看清票型。
+    visibility: { public: true, visibleTo: [], revealInReview: true },
   });
   const submittedVoterIds = [...voteState.submittedVoterIds, action.voterId];
   const submittedSnapshot: GameSnapshot = {

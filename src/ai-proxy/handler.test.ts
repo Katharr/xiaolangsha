@@ -225,6 +225,104 @@ describe("buildPrompt (ISO-001: 只含可见信息)", () => {
     expect(prompt.system + prompt.user).not.toContain("secret-key-123");
   });
 
+  it("injects a name-bound persona, and different names get different system prompts", () => {
+    const jie = buildPrompt(voteRequest(fakeVi({ ownName: "阿杰" })));
+    const zhang = buildPrompt(voteRequest(fakeVi({ ownName: "老张" })));
+
+    // 注入了「你的性格：…」一行。
+    expect(jie.system).toContain("你的性格：");
+    // 名字不同 → 性格不同 → system 段不同（锁定「名字绑性格」）。
+    expect(jie.system).not.toBe(zhang.system);
+  });
+
+  it("gives the same persona for the same name across calls (stable)", () => {
+    const a = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));
+    const b = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));
+    expect(a.system).toBe(b.system);
+  });
+
+  it("uses a casual, non-report speech instruction", () => {
+    const prompt = buildPrompt({
+      gameId: "g-1",
+      taskType: "speech",
+      playerId: "ai-1",
+      visibleInformation: fakeVi(),
+    });
+    // 去掉了旧的「有逻辑、贴合阵营利益」分析腔。
+    expect(prompt.system).not.toContain("有逻辑、贴合");
+    expect(prompt.system).toContain("像真人那样自然");
+  });
+
+  it("injects the private-reasoning baseline (analysisSummary/decisionSummary) for in-game tasks", () => {
+    const prompt = buildPrompt(voteRequest());
+    expect(prompt.system).toContain("analysisSummary");
+    expect(prompt.system).toContain("decisionSummary");
+    // 反跟风纪律：票数不是证据。
+    expect(prompt.system).toContain("票数本身不是证据");
+  });
+
+  it("gives the vote task anti-bandwagon / counter-claim / consistency guidance", () => {
+    const prompt = buildPrompt(voteRequest());
+    expect(prompt.system).toContain("对跳");
+    expect(prompt.system).toContain("话少");
+    expect(prompt.system).toContain("保持一致");
+    // 候选顺序去偏见提示。
+    expect(prompt.system).toContain("不代表任何倾向");
+    // 仍不得泄漏其他玩家真实身份的断言式措辞。
+    expect(prompt.system).not.toMatch(/狼人是|预言家是/);
+  });
+
+  it("shuffles candidate order deterministically (same vi → identical system)", () => {
+    const vi = fakeVi({
+      legalActions: [
+        {
+          actionType: "vote",
+          actorId: "ai-1",
+          legalTargets: ["ai-3", "ai-4", "ai-5", "human-1"],
+          allowAbstain: true,
+          required: true,
+        },
+      ],
+    });
+    const a = buildPrompt(voteRequest(vi));
+    const b = buildPrompt(voteRequest(vi));
+    expect(a.system).toBe(b.system);
+  });
+
+  it("de-biases position by varying candidate order across seats", () => {
+    const legalActions = [
+      {
+        actionType: "vote" as const,
+        actorId: "ai-1",
+        legalTargets: ["ai-3", "ai-4", "ai-5", "ai-6", "human-1"],
+        allowAbstain: true,
+        required: true,
+      },
+    ];
+    const systems = [1, 2, 3, 4, 5, 6].map(
+      (ownSeat) => buildPrompt(voteRequest(fakeVi({ ownSeat, legalActions }))).system,
+    );
+    // 不同座位（不同洗牌种子）至少产生两种不同的候选排列。
+    expect(new Set(systems).size).toBeGreaterThan(1);
+  });
+
+  it("keeps analysisSummary optional so scripted fallback (no summaries) stays valid", async () => {
+    // 不含 analysisSummary/decisionSummary 的返回仍是合法 payload（证明没误改成 required）。
+    const fetchImpl = vi.fn(async () =>
+      chatResponse(JSON.stringify({ choiceType: "target", targetId: "ai-3" })),
+    );
+    const result = await handleAiRespond(
+      voteRequest(),
+      configured,
+      fetchImpl as unknown as typeof fetch,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.analysisSummary).toBeUndefined();
+      expect(result.data.decisionSummary).toBeUndefined();
+    }
+  });
+
   it("builds a review prompt from questionText + reviewContext only", () => {
     const prompt = buildPrompt({
       gameId: "g-1",

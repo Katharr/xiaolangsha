@@ -268,9 +268,10 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     const voteEvent = firstVote.events.find((event) => event.type === "vote_submitted");
 
     expect(firstVote.events.map((event) => event.type)).toEqual(["vote_submitted"]);
+    // 明牌投票：vote_submitted 对全场公开。
     expect(voteEvent?.visibility).toEqual({
-      public: false,
-      visibleTo: [humanPlayerId],
+      public: true,
+      visibleTo: [],
       revealInReview: true,
     });
     expect(firstVote.snapshot.gamePhase).toBe("vote");

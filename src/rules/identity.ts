@@ -1,23 +1,9 @@
 import type { BoardConfig, Faction, Player, Role, RoleCategory } from "../shared";
+// 展示用名字池与「名字↔性格」绑定的唯一事实源在 shared/personas.ts。
+// 名字本身不含 human/ai 信息——配合可见信息已移除 controller，AI 无法分辨谁是真人。
+import { NAME_POOL } from "../shared";
 
 const standardHumanRoleOrder: Role[] = ["werewolf", "seer", "villager"];
-
-/**
- * 展示用名字池。所有玩家（含真人）从这里随机取名，UI 仅对真人额外标「(你)」。
- * 名字本身不含 human/ai 信息——配合可见信息已移除 controller，AI 无法分辨谁是真人。
- */
-const NAME_POOL: string[] = [
-  "小林",
-  "阿杰",
-  "花花",
-  "老张",
-  "莉莉",
-  "大壮",
-  "囡囡",
-  "阿明",
-  "蓉蓉",
-  "胖虎",
-];
 
 export function getFactionForRole(role: Role): Faction {
   return role === "werewolf" ? "werewolf_team" : "good_team";

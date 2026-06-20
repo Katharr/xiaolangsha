@@ -11,7 +11,7 @@
 import type { z } from "zod";
 
 import type { AppError, Result, VisibleInformationSnapshot } from "../shared";
-import { aiTaskPayloadSchema, aiTaskRequestSchema, err, ok } from "../shared";
+import { aiTaskPayloadSchema, aiTaskRequestSchema, err, ok, personaForName } from "../shared";
 
 import type { ProxyConfig } from "./config";
 
@@ -101,17 +101,77 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
     system: [
       `你正在玩一局 ${totalPlayers} 人狼人杀（主流「预女猎」屠边规则：杀光所有平民或所有神职任一边，狼人即获胜）。`,
       `你叫「${vi.ownName}」，坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
+      `你的性格：${personaForName(vi.ownName)}。说话时自然地流露这种性格，但别刻意表演。`,
       "所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
+      STYLE_GUIDE,
       "重要：你只能依据下面提供的「可见信息」做判断，绝不能假设你知道其他玩家的真实身份，也不要凭空怀疑或针对某位玩家——只根据其发言与行为的逻辑来推理。",
+      reasoningInstruction(),
       taskInstruction(req.taskType, vi),
       OUTPUT_CONTRACT,
-    ].join("\n"),
+    ].filter((line) => line.length > 0).join("\n"),
     user: [
       "当前可见信息（visibleInformation，JSON）：",
       safeStringify(vi),
       ...(draft ? ["", `你此前的草稿（可参考或改写）：${draft}`] : []),
     ].join("\n"),
   };
+}
+
+/**
+ * 说话风格：轻松开黑但有边界。让 AI 像和朋友面对面玩那样自然开口，而不是念分析报告，
+ * 但话始终服务于这局游戏，不为玩梗跑题成纯聊天。
+ */
+const STYLE_GUIDE = [
+  "把这局当成周末和一群朋友面对面玩狼人杀，气氛轻松随意。",
+  "开口像平时聊天那样自然：可以短句、带点情绪和口头禅，偶尔吐槽或调侃一句也行。",
+  "但别为了搞笑而跑题——你的话始终是在推进这局游戏（找狼/自保/带节奏），不是来纯聊天的；点到为止，别刷梗、别长篇大论。",
+  "别写成条理分明的分析报告或念稿，不用「第一第二第三」那套；一两句到位的大白话往往比长篇分析更像真人。",
+].join("\n");
+
+/**
+ * 决策前「私有推理」基线块（始终生效，装配在 taskInstruction 之前）。
+ *
+ * 难度接缝：签名保留 `difficulty` 形参位置。未来「简单档=想得浅、可失误」「困难档=完整
+ * 思维链 + 记忆反思」从这里按档返回不同深度即可，其余装配无需改动。当前对所有难度返回同一段。
+ */
+function reasoningInstruction(/* 未来: difficulty */): string {
+  return [
+    "做决定前，先在 analysisSummary 里用一两句把局面想清楚（这段只有你自己看得到，不会给别人看）：现在谁可信、谁可疑，依据是什么。",
+    "如果你之前发过言，你的票和行动要跟当时表达的判断保持一致，别自相矛盾。",
+    "别只因为某人话少、或者别人已经投了他，就跟着投——票数本身不是证据，平安夜没什么可说也不等于可疑。",
+    "想好之后，在 decisionSummary 里一句话说清你为什么这么选。",
+  ].join("\n");
+}
+
+/**
+ * 候选目标去偏见洗牌：对一份副本做确定性 Fisher-Yates（种子=gameId+generatedAtSeq+ownSeat），
+ * 避免模型按列表首尾位置锚定选人。**绝不改动 vi 本身**（user 段仍精确等于 vi 序列化，守 ISO 测试）。
+ * 同一 vi 必得同一顺序（可复现）；不同座位通常得到不同顺序（去位置偏见）。
+ */
+function shuffledTargets(targets: string[], vi: VisibleInformationSnapshot): string[] {
+  const seed = `${vi.gameId}#${vi.generatedAtSeq}#${vi.ownSeat}`;
+  // FNV-1a 把种子串压成 32 位整数。
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  // xorshift32 作为确定性 PRNG。
+  let state = hash >>> 0 || 1;
+  const nextInt = (): number => {
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state >>> 0;
+  };
+  const copy = targets.slice();
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = nextInt() % (i + 1);
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 const OUTPUT_CONTRACT = [
@@ -138,24 +198,33 @@ function taskInstruction(
   vi: VisibleInformationSnapshot,
 ): string {
   const legalTargets = vi.legalActions.flatMap((action) => action.legalTargets);
+  const orderedTargets = legalTargets.length > 0 ? shuffledTargets(legalTargets, vi) : [];
   const targetsHint =
-    legalTargets.length > 0 ? `合法目标 id：${legalTargets.join("、")}。` : "当前没有可选目标。";
+    orderedTargets.length > 0
+      ? `合法目标 id：${orderedTargets.join("、")}。（候选顺序是随机排的，不代表任何倾向，别按排序先后选人。）`
+      : "当前没有可选目标。";
 
   switch (taskType) {
     case "night_action":
-      return `任务：夜晚行动。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。${targetsHint}`;
+      return `任务：夜晚行动。先按上面的方法在心里想清楚再选。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。${targetsHint}`;
     case "witch_action":
-      return `任务：女巫行动。你已得知今晚被狼刀的人（见可见信息里仅你可见的私有事件）。选择 witchChoice：save 救他、poison 并给出 targetId 毒一人、或 skip 放弃。解药和毒药各只有一次。${targetsHint}`;
+      return `任务：女巫行动。你已得知今晚被刀的人（见可见信息里仅你可见的私有事件）。先按上面的方法想清楚再决定：选择 witchChoice：save 救他、poison 并给出 targetId 毒一人、或 skip 放弃。解药和毒药各只有一次。${targetsHint}`;
     case "hunter_shoot":
-      return `任务：你是猎人且已出局，可开枪带走一名存活玩家。给出 targetId 开枪，或留空放弃开枪。${targetsHint}`;
+      return `任务：你是猎人且已出局，可开枪带走一名存活玩家。先按上面的方法想清楚该带走谁最有利再开枪。给出 targetId 开枪，或留空放弃开枪。${targetsHint}`;
     case "vote":
-      return `任务：投票放逐。选择 choiceType="target" 并给出 targetId 投出你的一票，或在允许时 choiceType="abstain" 弃票。不能投自己。${targetsHint}`;
+      return [
+        "任务：投票放逐。先按上面的方法在 analysisSummary 里想清楚再投。",
+        "把票投在对你阵营最有利的人身上：好人要找狼、狼要带节奏，但都得基于这局讨论里的逻辑，而不是挑场上最软的柿子。",
+        "如果场上出现预言家对跳（两个人互相争着认领同一个神职、说对方假），那其中必定藏着一匹狼——你的票通常应落在你判断为假的那个对跳者身上、或他报出的查杀身上，而不是去投一个一直安静的普通玩家。",
+        "别因为谁话少、平安夜没东西可说就把他当突破口；也要跟你自己刚才发言里表达的怀疑保持一致。",
+        `然后 choiceType="target" 配 targetId 投出一票，或在允许时 choiceType="abstain" 弃票。不能投自己。${targetsHint}`,
+      ].join("\n");
     case "speech":
-      return "任务：白天发言。请输出一段有逻辑、贴合你身份与阵营利益的中文发言（仅填 text，控制在 200 字内）。";
+      return "任务：白天发言。用你自己的性格、像真人那样自然地说几句（仅填 text，别太长，大白话即可）。先在心里把判断想好，说出来的话要和你心里的判断一致；该带的节奏、该表的态照样表，只是用平时聊天的口气说出来。";
     case "tie_speech":
-      return "任务：平票后的二次拉票发言。请简短重申你的立场以争取选票（仅填 text，控制在 200 字内）。";
+      return "任务：平票了，再争取一下选票。用聊天的口气简短重申你的立场（要和你之前的判断一致），别念稿（仅填 text，越短越自然）。";
     case "last_words":
-      return "任务：你被放逐了，请留下遗言（仅填 text，控制在 200 字内）。";
+      return "任务：你被放逐了，留几句遗言。像真人那样自然交代你的判断或心里话即可，不用长篇大论（仅填 text）。";
     default:
       return "任务：请根据可见信息给出合理输出。";
   }

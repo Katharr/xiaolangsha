@@ -107,6 +107,20 @@ function mapEvent(
       };
     }
 
+    case "vote_submitted": {
+      const voterId = String(event.payload.voterId ?? "");
+      const text =
+        event.payload.choiceType === "abstain"
+          ? `${labelOf(voterId)} 弃票。`
+          : `${labelOf(voterId)} 投票给 ${labelOf(event.payload.targetId)}。`;
+      return {
+        id: event.eventId,
+        seq: event.seq,
+        kind: "vote_result",
+        text,
+      };
+    }
+
     case "vote_resolved": {
       return {
         id: event.eventId,
@@ -161,7 +175,7 @@ function mapEvent(
     }
 
     default:
-      // 其余事件（phase_changed / night_action_submitted / vote_submitted /
+      // 其余事件（phase_changed / night_action_submitted /
       // game_created / game_started / win_checked / fast_forward_* 等）不入流。
       return null;
   }

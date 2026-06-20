@@ -90,7 +90,10 @@ export function legalNightTargets(
         .filter((p) => p.playerId !== actor.playerId)
         .map((p) => p.playerId);
     case "witch":
-      return alive.map((p) => p.playerId);
+      // 女巫毒药不能毒自己（规则层 submitWitchAction 也会拦截），故排除自身。
+      return alive
+        .filter((p) => p.playerId !== actor.playerId)
+        .map((p) => p.playerId);
     default:
       return [];
   }
