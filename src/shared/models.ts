@@ -250,6 +250,18 @@ export type LegalAction = {
   required: boolean;
 };
 
+/**
+ * 同阵营队友（viewer 合法知晓其身份的人）。当前仅狼人之间互相可见：开局狼队认人，
+ * 死后仍记得谁是队友。神职/村民之间互不知晓，故该字段对他们为空。
+ */
+export type TeammateRef = {
+  playerId: string;
+  name: string;
+  seat: number;
+  role: Role;
+  alive: boolean;
+};
+
 export type VisibleInformationSnapshot = {
   gameId: string;
   viewerId: string;
@@ -261,6 +273,8 @@ export type VisibleInformationSnapshot = {
   ownName: string;
   ownRole: Role;
   ownFaction: Faction;
+  /** 狼人才有：你的狼队友（含已出局的）。其它身份为空数组。 */
+  teammates: TeammateRef[];
   alivePlayers: PublicPlayerRef[];
   deadPlayers: PublicDeathRef[];
   publicEvents: VisibleEventRef[];

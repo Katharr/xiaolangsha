@@ -5,6 +5,7 @@ import type {
   Player,
   PublicDeathRef,
   PublicPlayerRef,
+  TeammateRef,
   TruthEvent,
   VisibleEventRef,
   VisibleInformationSnapshot,
@@ -37,6 +38,7 @@ export function buildVisibleInformation(
     ownName: viewer.name,
     ownRole: viewer.role,
     ownFaction: viewer.faction,
+    teammates: collectTeammates(viewer, snapshot.players),
     alivePlayers: snapshot.players
       .filter((player) => player.alive)
       .map(toPublicPlayerRef),
@@ -54,6 +56,25 @@ export function buildVisibleInformation(
     legalActions: getLegalActions(viewer, snapshot),
     canAct: canViewerAct(viewer, snapshot),
   };
+}
+
+/**
+ * 同阵营队友：仅狼人之间互相知晓身份（开局认人，死后仍记得）。其它身份返回空数组。
+ * 含已出局的队友，便于狼人在白天/复盘里记清谁是自己人。
+ */
+function collectTeammates(viewer: Player, players: Player[]): TeammateRef[] {
+  if (viewer.role !== "werewolf") {
+    return [];
+  }
+  return players
+    .filter((p) => p.role === "werewolf" && p.playerId !== viewer.playerId)
+    .map((p) => ({
+      playerId: p.playerId,
+      name: p.name,
+      seat: p.seat,
+      role: p.role,
+      alive: p.alive,
+    }));
 }
 
 function toPublicPlayerRef(player: Player): PublicPlayerRef {

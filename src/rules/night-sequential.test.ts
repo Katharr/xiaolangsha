@@ -201,6 +201,22 @@ describe("顺序夜晚 + 女巫 + 屠边", () => {
     expect(state.snapshot.witchState?.saveAvailable).toBe(false);
   });
 
+  it("狼人能看到狼队友身份；非狼玩家的 teammates 为空", () => {
+    const state = reachFirstNight();
+    const [wolf1, wolf2] = idsByRole(state.snapshot, "werewolf");
+    const seer = idsByRole(state.snapshot, "seer")[0];
+
+    const wolfView = buildVisibleInformation(wolf1, state.snapshot, state.events);
+    expect(wolfView.teammates.map((t) => t.playerId)).toEqual([wolf2]);
+    expect(wolfView.teammates[0]?.role).toBe("werewolf");
+    // 队友不会把自己列进去。
+    expect(wolfView.teammates.some((t) => t.playerId === wolf1)).toBe(false);
+
+    // 预言家（好人）看不到任何队友。
+    const seerView = buildVisibleInformation(seer, state.snapshot, state.events);
+    expect(seerView.teammates).toEqual([]);
+  });
+
   it("女巫毒药毒杀目标；被刀者无人救则死亡（两死）", () => {
     let state = reachFirstNight();
     const [wolf1, wolf2] = idsByRole(state.snapshot, "werewolf");

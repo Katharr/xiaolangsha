@@ -21,6 +21,7 @@ function baseVi(
     ownName: "阿杰",
     ownRole: "werewolf",
     ownFaction: "werewolf_team",
+    teammates: [],
     alivePlayers: [],
     deadPlayers: [],
     publicEvents: [],

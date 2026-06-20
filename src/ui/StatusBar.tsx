@@ -12,7 +12,13 @@ type StatusBarProps = {
   vi: VisibleInformationSnapshot | null;
 };
 
-type SeatRow = { seat: number; name: string; isViewer: boolean; alive: boolean };
+type SeatRow = {
+  seat: number;
+  name: string;
+  isViewer: boolean;
+  alive: boolean;
+  isTeammate: boolean;
+};
 
 /**
  * 顶部状态栏：相位 / 轮次 / 真人自己的身份 / 玩家存活简表。
@@ -32,18 +38,21 @@ export function StatusBar({ phase, participation, vi }: StatusBarProps) {
   const isNight = phase === "night_action";
   const roundText = isNight ? `第 ${vi.round.night} 夜` : `第 ${vi.round.day} 天`;
 
+  const teammateIds = new Set(vi.teammates.map((t) => t.playerId));
   const rows: SeatRow[] = [
     ...vi.alivePlayers.map((player) => ({
       seat: player.seat,
       name: player.name,
       isViewer: player.playerId === vi.viewerId,
       alive: true,
+      isTeammate: teammateIds.has(player.playerId),
     })),
     ...vi.deadPlayers.map((player) => ({
       seat: player.seat,
       name: player.name,
       isViewer: player.playerId === vi.viewerId,
       alive: false,
+      isTeammate: teammateIds.has(player.playerId),
     })),
   ].sort((a, b) => a.seat - b.seat);
 
@@ -63,7 +72,8 @@ export function StatusBar({ phase, participation, vi }: StatusBarProps) {
             key={row.seat}
             className={row.alive ? "seat-alive" : "seat-dead"}
           >
-            {row.name}（{row.seat}号）{row.isViewer ? "·你" : ""}{" "}
+            {row.name}（{row.seat}号）{row.isViewer ? "·你" : ""}
+            {row.isTeammate ? "·狼队友" : ""}{" "}
             {row.alive ? "存活" : "出局"}
           </li>
         ))}

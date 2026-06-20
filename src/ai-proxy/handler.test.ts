@@ -18,6 +18,7 @@ function fakeVi(
     ownName: "阿杰",
     ownRole: "villager",
     ownFaction: "good_team",
+    teammates: [],
     alivePlayers: [],
     deadPlayers: [],
     publicEvents: [],

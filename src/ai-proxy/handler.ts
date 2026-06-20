@@ -110,6 +110,13 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
       `你叫「${vi.ownName}」，坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
       `你的性格：${personaForName(vi.ownName)}。说话时自然地流露这种性格，但别刻意表演。`,
       `你判断局面的倾向：${dispositionForName(vi.ownName)}。按这个倾向去权衡证据、形成你自己的判断，不必和别人一致——大家想法不同本就正常。`,
+      ...(vi.teammates.length > 0
+        ? [
+            `你的狼队友：${vi.teammates
+              .map((t) => `${t.name}（${t.seat}号，${t.alive ? "存活" : "已出局"}）`)
+              .join("、")}。他们和你是一伙的，绝不要查杀、归票或投票针对自己的队友；白天要不动声色地帮队友洗清嫌疑、把火引到好人身上。`,
+          ]
+        : []),
       "所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
       BOARD_RULES,
       STYLE_GUIDE,
@@ -224,8 +231,19 @@ function taskInstruction(
       : "当前没有可选目标。";
 
   switch (taskType) {
-    case "night_action":
-      return `任务：夜晚行动。先按上面的方法在心里想清楚再选。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。${targetsHint}`;
+    case "night_action": {
+      const wolfTeamNote =
+        vi.ownRole === "werewolf" && vi.teammates.length > 0
+          ? "今晚的刀由狼队共同投票决定：你和队友各报一个目标，多数票者被刀，平票时由真人狼拍板。和队友尽量刀同一个人，别把刀票浪费在自己队友身上。"
+          : "";
+      return [
+        "任务：夜晚行动。先按上面的方法在心里想清楚再选。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。",
+        wolfTeamNote,
+        targetsHint,
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n");
+    }
     case "witch_action":
       return [
         "任务：女巫行动。你已得知今晚被刀的人（见可见信息里仅你可见的私有事件）。先按上面的方法想清楚再决定 witchChoice：save 救他、poison 并给出 targetId 毒一人、或 skip 放弃。解药和毒药各只有一次。",

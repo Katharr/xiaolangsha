@@ -16,6 +16,7 @@ function fakeVi(): VisibleInformationSnapshot {
     ownName: "莉莉",
     ownRole: "villager",
     ownFaction: "good_team",
+    teammates: [],
     alivePlayers: [],
     deadPlayers: [],
     publicEvents: [],

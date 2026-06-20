@@ -223,6 +223,14 @@ export const publicPlayerRefSchema = z.object({
   publicRole: roleSchema.optional(),
 });
 
+export const teammateRefSchema = z.object({
+  playerId: nonEmptyString,
+  name: nonEmptyString,
+  seat: z.number().int().positive(),
+  role: roleSchema,
+  alive: z.boolean(),
+});
+
 export const publicDeathRefSchema = z.object({
   playerId: nonEmptyString,
   name: nonEmptyString,
@@ -348,6 +356,7 @@ export const visibleInformationSnapshotSchema = z.object({
   ownName: nonEmptyString,
   ownRole: roleSchema,
   ownFaction: factionSchema,
+  teammates: z.array(teammateRefSchema),
   alivePlayers: z.array(publicPlayerRefSchema),
   deadPlayers: z.array(publicDeathRefSchema),
   publicEvents: z.array(visibleEventRefSchema),

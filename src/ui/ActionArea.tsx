@@ -359,8 +359,19 @@ export function ActionArea({
           : nightActionType === "seer_check"
             ? "查验"
             : "守护";
+      const teammates = vi.teammates ?? [];
+      const isWolfKill = nightActionType === "werewolf_kill";
       return wrap(
         <>
+          {isWolfKill && teammates.length > 0 ? (
+            <p className="action-hint">
+              你的狼队友：
+              {teammates
+                .map((t) => `${t.name}（${t.seat}号，${t.alive ? "存活" : "已出局"}）`)
+                .join("、")}
+              。今晚的刀由狼队共同投票决定，平票时按你的选择来。
+            </p>
+          ) : null}
           <p className="action-hint">选择今晚要{verb}的目标：</p>
           {targetButtons(action.legalTargets)}
           <button

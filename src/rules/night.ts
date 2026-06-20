@@ -116,7 +116,10 @@ export function nextNightActor(
   return actorId ? { actorId, step } : null;
 }
 
-/** 狼队唱票：多数票目标；平票取座位最小者。空票返回 undefined。 */
+/**
+ * 狼队唱票：多数票目标。平票时**优先按真人狼的选择**裁定（这是真人的游戏，平票由他拍板）；
+ * 若没有真人狼、或真人狼的票不在平票集合里，再退回座位最小者。空票返回 undefined。
+ */
 export function tallyWolfKill(
   wolfVotes: Record<string, string> | undefined,
   players: Player[],
@@ -138,7 +141,13 @@ export function tallyWolfKill(
   if (top.length === 1) {
     return top[0];
   }
-  // 平票 → 座位最小者
+  // 平票 → 真人狼说了算：若真人狼也投了平票集合里的某人，就听他的。
+  const humanWolf = players.find((p) => p.isHuman && p.role === "werewolf");
+  const humanPick = humanWolf ? wolfVotes[humanWolf.playerId] : undefined;
+  if (humanPick && top.includes(humanPick)) {
+    return humanPick;
+  }
+  // 否则退回座位最小者。
   const bySeat = top
     .map((id) => ({ id, seat: players.find((p) => p.playerId === id)?.seat ?? 999 }))
     .sort((a, b) => a.seat - b.seat);
