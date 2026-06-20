@@ -50,7 +50,7 @@ export function buildVisibleInformation(
       .filter((event) => event.visibility.visibleTo.includes(viewerId))
       .map(toVisibleEventRef),
     speeches: events.flatMap(toVisibleSpeech),
-    votes: events.flatMap(toVisibleVote),
+    votes: collectVisibleVotes(events, viewerId),
     legalActions: getLegalActions(viewer, snapshot),
     canAct: canViewerAct(viewer, snapshot),
   };
@@ -114,25 +114,49 @@ function toVisibleSpeech(event: TruthEvent): VisibleSpeech[] {
   ];
 }
 
-function toVisibleVote(event: TruthEvent): VisibleVote[] {
-  if (event.type !== "vote_submitted") {
-    return [];
+function toVisibleVote(event: TruthEvent): VisibleVote {
+  return {
+    eventId: event.eventId,
+    day: event.round.day,
+    voteRound: event.round.voteRound === "tie_break" ? "tie_break" : "first",
+    voterId: String(event.payload.voterId),
+    choiceType: event.payload.choiceType === "abstain" ? "abstain" : "target",
+    ...(typeof event.payload.targetId === "string"
+      ? { targetId: event.payload.targetId }
+      : {}),
+  };
+}
+
+/**
+ * 同时暗投：结算前每个 viewer 只看得到自己投的票（杜绝跟票）；某轮一旦结算
+ * （出现该 day+voteRound 的 vote_resolved），该轮全部票型对所有人同时翻牌。
+ */
+function collectVisibleVotes(
+  events: TruthEvent[],
+  viewerId: string,
+): VisibleVote[] {
+  const resolvedRounds = new Set<string>();
+  for (const event of events) {
+    if (event.type === "vote_resolved") {
+      resolvedRounds.add(`${event.round.day}:${event.round.voteRound}`);
+    }
   }
 
-  return [
-    {
-      eventId: event.eventId,
-      day: event.round.day,
-      voteRound:
-        event.round.voteRound === "tie_break" ? "tie_break" : "first",
-      voterId: String(event.payload.voterId),
-      choiceType:
-        event.payload.choiceType === "abstain" ? "abstain" : "target",
-      ...(typeof event.payload.targetId === "string"
-        ? { targetId: event.payload.targetId }
-        : {}),
-    },
-  ];
+  const votes: VisibleVote[] = [];
+  for (const event of events) {
+    if (event.type !== "vote_submitted") {
+      continue;
+    }
+    const voterId = String(event.payload.voterId);
+    const revealed = resolvedRounds.has(
+      `${event.round.day}:${event.round.voteRound}`,
+    );
+    if (voterId !== viewerId && !revealed) {
+      continue;
+    }
+    votes.push(toVisibleVote(event));
+  }
+  return votes;
 }
 
 function getLegalActions(viewer: Player, snapshot: GameSnapshot): LegalAction[] {

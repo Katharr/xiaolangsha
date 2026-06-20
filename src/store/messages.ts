@@ -188,6 +188,24 @@ function formatVoteResult(
   const labelOf = (id: string) => meta.get(id)?.label ?? "某玩家";
   const tally = event.payload.tally as Record<string, unknown> | undefined;
   const exiledPlayerId = event.payload.exiledPlayerId;
+
+  // 同时翻牌：把每个人投了谁/弃票一次性公示出来。
+  const breakdown = Array.isArray(event.payload.votes)
+    ? (event.payload.votes as Array<{
+        voterId?: unknown;
+        choiceType?: unknown;
+        targetId?: unknown;
+      }>)
+    : [];
+  const breakdownParts = breakdown.map((vote) => {
+    const voter = labelOf(String(vote.voterId ?? ""));
+    return vote.choiceType === "abstain"
+      ? `${voter} 弃票`
+      : `${voter}→${labelOf(String(vote.targetId ?? ""))}`;
+  });
+  const breakdownText =
+    breakdownParts.length > 0 ? `\n票型：${breakdownParts.join("，")}` : "";
+
   const parts: string[] = [];
   if (tally) {
     for (const [playerId, count] of Object.entries(tally)) {
@@ -196,9 +214,9 @@ function formatVoteResult(
   }
   const tallyText = parts.length > 0 ? `（${parts.join("，")}）` : "";
   if (typeof exiledPlayerId === "string") {
-    return `投票结果：${labelOf(exiledPlayerId)} 被放逐。${tallyText}`;
+    return `投票结果：${labelOf(exiledPlayerId)} 被放逐。${tallyText}${breakdownText}`;
   }
-  return `投票结果：无人被放逐。${tallyText}`;
+  return `投票结果：无人被放逐。${tallyText}${breakdownText}`;
 }
 
 type PlayerMeta = { seat: number; name: string; label: string };

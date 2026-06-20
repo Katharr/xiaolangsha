@@ -268,10 +268,10 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     const voteEvent = firstVote.events.find((event) => event.type === "vote_submitted");
 
     expect(firstVote.events.map((event) => event.type)).toEqual(["vote_submitted"]);
-    // 明牌投票：vote_submitted 对全场公开。
+    // 同时暗投：vote_submitted 在结算前只有投票者本人可见。
     expect(voteEvent?.visibility).toEqual({
-      public: true,
-      visibleTo: [],
+      public: false,
+      visibleTo: [humanPlayerId],
       revealInReview: true,
     });
     expect(firstVote.snapshot.gamePhase).toBe("vote");
@@ -285,6 +285,10 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
 
     expect(humanAfter.canAct).toBe(false);
     expect(aiVoterAfter.canAct).toBe(true);
+
+    // 防跟票：本轮未结算时，其他投票者看不到这张票；投票者只看得到自己的票。
+    expect(aiVoterAfter.votes).toEqual([]);
+    expect(humanAfter.votes.map((vote) => vote.voterId)).toEqual([humanPlayerId]);
   });
 
   it("resolves a unique majority into exile, last words, and the next night", () => {
@@ -308,10 +312,26 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
       voteRound: "first",
       day: 1,
       tally: { "ai-4": 3, "ai-1": 1 },
+      // 结算时一次性公示全部票型（按投票先后顺序）。
+      votes: [
+        { voterId: "human-1", choiceType: "target", targetId: "ai-4" },
+        { voterId: "ai-1", choiceType: "target", targetId: "ai-4" },
+        { voterId: "ai-2", choiceType: "target", targetId: "ai-4" },
+        { voterId: "ai-4", choiceType: "target", targetId: "ai-1" },
+      ],
       exiledPlayerId: "ai-4",
       outcome: "exile",
     });
     expect(voteResolved?.visibility.public).toBe(true);
+
+    // 结算后该轮票型对所有存活玩家同时翻牌（包括没投这张票的人）。
+    const aliveVotesView = buildVisibleInformation("ai-2", resolved.snapshot, [
+      ...state.events,
+      ...resolved.events,
+    ]);
+    expect(
+      aliveVotesView.votes.filter((vote) => vote.voteRound === "first").length,
+    ).toBe(4);
 
     expect(resolved.snapshot.gamePhase).toBe("exile_last_words");
     expect(resolved.snapshot.pendingAction).toEqual({

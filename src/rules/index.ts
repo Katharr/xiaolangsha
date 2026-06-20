@@ -1601,8 +1601,8 @@ function submitVote(
     idempotencyKey: action.idempotencyKey,
     now: context.now,
     round: snapshot.round,
-    // 明牌投票：谁投了谁对全场公开（与 AI 看到的 votes 一致），方便人类看清票型。
-    visibility: { public: true, visibleTo: [], revealInReview: true },
+    // 同时暗投：每张票在结算前只有投票者本人可见，杜绝跟票；结算时由 vote_resolved 一次性公示。
+    visibility: { public: false, visibleTo: [action.voterId], revealInReview: true },
   });
   const submittedVoterIds = [...voteState.submittedVoterIds, action.voterId];
   const submittedSnapshot: GameSnapshot = {
@@ -1684,6 +1684,15 @@ function resolveVote(params: {
       ? "tie"
       : "no_exile";
 
+  // 结算时一次性公示全部票型（谁投了谁/谁弃票），随 public 的 vote_resolved 同时翻牌。
+  const voteBreakdown = submissions.map((event) => ({
+    voterId: String(event.payload.voterId),
+    choiceType: event.payload.choiceType === "abstain" ? "abstain" : "target",
+    ...(typeof event.payload.targetId === "string"
+      ? { targetId: event.payload.targetId }
+      : {}),
+  }));
+
   let nextSeq = snapshot.lastEventSeq + 1;
   const events: TruthEvent[] = [params.voteEvent];
 
@@ -1698,6 +1707,7 @@ function resolveVote(params: {
         voteRound: voteState.voteRound,
         day: snapshot.round.day,
         tally,
+        votes: voteBreakdown,
         exiledPlayerId: exiledId,
         outcome,
       },
