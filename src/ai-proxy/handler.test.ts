@@ -235,6 +235,29 @@ describe("buildPrompt (ISO-001: 只含可见信息)", () => {
     expect(jie.system).not.toBe(zhang.system);
   });
 
+  it("injects a name-bound judgment disposition (反趋同：判断层面就分歧)", () => {
+    const jie = buildPrompt(voteRequest(fakeVi({ ownName: "阿杰" })));
+    const zhang = buildPrompt(voteRequest(fakeVi({ ownName: "老张" })));
+
+    // 注入了「你判断局面的倾向：…」一行。
+    expect(jie.system).toContain("你判断局面的倾向：");
+    // 名字不同 → 倾向不同 → 倾向那一行的内容不同。
+    const dispLine = (system: string) =>
+      system.split("\n").find((line) => line.startsWith("你判断局面的倾向："));
+    expect(dispLine(jie.system)).not.toBe(dispLine(zhang.system));
+  });
+
+  it("speech 指令反复读 + 提示层去偏见", () => {
+    const prompt = buildPrompt({
+      gameId: "g-1",
+      taskType: "speech",
+      playerId: "ai-1",
+      visibleInformation: fakeVi(),
+    });
+    expect(prompt.system).toContain("别附和或复述");
+    expect(prompt.system).toContain("别按发言顺序或座位顺序");
+  });
+
   it("gives the same persona for the same name across calls (stable)", () => {
     const a = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));
     const b = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));

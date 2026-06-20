@@ -11,7 +11,14 @@
 import type { z } from "zod";
 
 import type { AppError, Result, VisibleInformationSnapshot } from "../shared";
-import { aiTaskPayloadSchema, aiTaskRequestSchema, err, ok, personaForName } from "../shared";
+import {
+  aiTaskPayloadSchema,
+  aiTaskRequestSchema,
+  dispositionForName,
+  err,
+  ok,
+  personaForName,
+} from "../shared";
 
 import type { ProxyConfig } from "./config";
 
@@ -102,6 +109,7 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
       `你正在玩一局 ${totalPlayers} 人狼人杀（主流「预女猎」屠边规则：杀光所有平民或所有神职任一边，狼人即获胜）。`,
       `你叫「${vi.ownName}」，坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
       `你的性格：${personaForName(vi.ownName)}。说话时自然地流露这种性格，但别刻意表演。`,
+      `你判断局面的倾向：${dispositionForName(vi.ownName)}。按这个倾向去权衡证据、形成你自己的判断，不必和别人一致——大家想法不同本就正常。`,
       "所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
       BOARD_RULES,
       STYLE_GUIDE,
@@ -147,7 +155,7 @@ const STYLE_GUIDE = [
  */
 function reasoningInstruction(/* 未来: difficulty */): string {
   return [
-    "做决定前，先在 analysisSummary 里用一两句把局面想清楚（这段只有你自己看得到，不会给别人看）：现在谁可信、谁可疑，依据是什么。",
+    "做决定前，先在 analysisSummary 里用一两句把局面想清楚（这段只有你自己看得到，不会给别人看）：现在谁可信、谁可疑，依据是什么。按你自己的判断倾向去权衡，得出的结论和别人不一样很正常。",
     "如果你之前发过言，你的票和行动要跟当时表达的判断保持一致，别自相矛盾。",
     "别只因为某人话少、或者别人已经投了他，就跟着投——票数本身不是证据，平安夜没什么可说也不等于可疑。",
     "想好之后，在 decisionSummary 里一句话说清你为什么这么选。",
@@ -236,10 +244,15 @@ function taskInstruction(
         "把票投在对你阵营最有利的人身上：好人要找狼、狼要带节奏，但都得基于这局讨论里的逻辑，而不是挑场上最软的柿子。",
         "如果场上出现预言家对跳（两个人互相争着认领同一个神职、说对方假），那其中必定藏着一匹狼——你的票通常应落在你判断为假的那个对跳者身上、或他报出的查杀身上，而不是去投一个一直安静的普通玩家。",
         "别因为谁话少、平安夜没东西可说就把他当突破口；也要跟你自己刚才发言里表达的怀疑保持一致。",
+        "你和别人结论不同很正常，按你自己的判断倾向投，不用凑大流、也别为了和别人不一样而乱投——投你真心认为最该走的那个人。",
         `然后 choiceType="target" 配 targetId 投出一票，或在允许时 choiceType="abstain" 弃票。不能投自己。${targetsHint}`,
       ].join("\n");
     case "speech":
-      return "任务：白天发言。用你自己的性格、像真人那样自然地说几句（仅填 text，别太长，大白话即可）。先在心里把判断想好，说出来的话要和你心里的判断一致；该带的节奏、该表的态照样表，只是用平时聊天的口气说出来。";
+      return [
+        "任务：白天发言。用你自己的性格、像真人那样自然地说几句（仅填 text，别太长，大白话即可）。先在心里把判断想好，说出来的话要和你心里的判断一致；该带的节奏、该表的态照样表，只是用平时聊天的口气说出来。",
+        "给出你自己的独立观点，别附和或复述前面人已经说过的话——如果你的判断和前面发言的人不同，就直接说出来，把分歧讲清楚比随大流更有用。",
+        "选怀疑对象时只看各人发言/行为的逻辑，别按发言顺序或座位顺序锚定谁（比如别习惯性盯着前几个发言的人或某个固定座位），按你自己的判断倾向去找最该怀疑的人。",
+      ].join("\n");
     case "tie_speech":
       return "任务：平票了，再争取一下选票。用聊天的口气简短重申你的立场（要和你之前的判断一致），别念稿（仅填 text，越短越自然）。";
     case "last_words":
