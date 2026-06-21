@@ -3,6 +3,8 @@
 > **这是会话交接文档。新会话请先读完本文件（重点看下方「## 现状基线」的最新进度），再按需读 `docs/BUILD-PLAN.md`。M1–M6 与「阶段二重构（顺序夜晚+预女猎+屠边）」均已完成，当前在 M7：手测交付 + 打磨。**
 >
 > **🎨 进行中：前端重设计（借鉴 wolfcha，落地环形牌桌）。视觉方向已定稿（方案 C），权威计划见 `docs/FRONTEND-REDESIGN.md`，预览基准 `preview/wolfcha-mockup-balanced.html`。下一步从该文档的「阶段 0」开始。逻辑层不动，只改 UI 层。**
+>
+> **🤖 待实施：AI 玩家提示词顶层重构（人物卡优先「先做人再玩游戏」+ 模块化分层）。修复「好人 AI 集体冤杀跳身份预言家」的系统性 bug。计划已定稿（未动代码），权威交接见 `docs/AI-PROMPT-REDESIGN.md`，调研依据见 `docs/AI-PROMPT-RESEARCH.md`。决策=固定老朋友·静态丰富人物卡（不采 wolfcha 式现生成，留作未来）；只改 ai-proxy 提示词层 + shared/personas 人物卡数据 + 新增 prompt/ 模块,逻辑层不动。**
 
 ## 这个项目是什么
 
@@ -68,6 +70,15 @@
 
 - **修复「AI 出非法动作→整局卡死」**：真 LLM 可能返回「语法合法但规则非法」的动作（实测：女巫在平安夜无刀口时仍选 `witchChoice:"save"` → 规则引擎拒 `Witch cannot use the antidote now.`，第 2 夜女巫步卡死）。旧 `runAiDriver` 一遇 `applyAction` 拒绝就 `rule_rejected` 停死；`withFallback` 只兜底「AI 调用报错」，管不到「返回了非法动作」。
 - **落地**：`src/store/driver.ts` 新增降级安全网——AI 步被规则拒绝时，用模块级 `SAFE_FALLBACK_AI = new ScriptedAiClient()`（输出恒为合法动作、ISO-001 安全）对同一步重新决策再 `applyAction` 一次；只有**连脚本安全动作都被拒**才算真异常、才 `rule_rejected` 停。脚本女巫无刀口时返回 `skip`（永远合法），正好化解这一类。新增可选回调 `onDegrade`，`gameStore` 接到后 `console.warn` 留痕（不卡死、仅记录 LLM 出非法动作）。回归测试 `driver.test.ts`「degrades to a safe scripted action…」。
+- 基线：`tsc -b` 绿、`npm test` **145 绿**、`npm run build` 绿。
+
+### 删除「快进」、改为出局即自动旁观（2026-06-21）
+
+- **需求**：删掉真人出局后的「快进到结局」功能（没啥用）。真人一死自动进入旁观：对局由 AI 自动打到结束，玩家可静候到结局看复盘，也可**随时直接重开一局**。
+- **删除面**：去掉 `request_fast_forward` 动作（`shared/actions.ts`、`schemas.ts`、`rules/index.ts` 的 case + `requestFastForward` 函数）、`fast_forwarding` 相位与 `fast_forwarded` 参与态枚举（`shared/enums.ts` + `labels.ts`/`debugSummary.ts` 对应映射）、UI 的快进/继续旁观按钮。**保留** `fast_forward_*` 事件类型枚举与叙事（惰性历史词汇，避免动持久化事件 schema；已无生产者）。
+- **自动旁观**：`driver.ts` 的 `nextDriverStep` 把判据从 `fast_forwarded` 改成 `humanDeadSpectating = participation==="dead_spectating"`——真人一出局，driver 即自动接管（代确认天亮 `auto_confirm_day` + AI 全程）一路推到 review。`rules/index.ts` 的 `confirmDayAnnouncement` 放行 `dead_spectating` 的代确认（原先只放行 `fast_forwarded`）。
+- **随时重开**：`confirmNewGame` 放宽——`review` **或** `dead_spectating` 均可开新局（事件 `fromPhase` 用实际相位）。UI `ActionArea` 旁观面板给「直接重开一局」按钮（**不受 `busy` 禁用**，方便观战途中立即重开）。
+- **并发安全网（关键）**：旁观自动推进期间 `busy` 全程为 true、旧 driver 仍在 `await` LLM；此时点「重开」会发起新 `dispatch`。`gameStore` 引入闭包 `generation` 代数：每次 `dispatch` 先 `++generation` 认领当前代；`drive(state, gen)` 据此判 `isCancelled`/守 `onStep`/`onHalt`，旧驱动一旦过期立刻停手且**绝不回写**已重置的开局态。`runAiDriver` 新增 `isCancelled?()`（循环顶 + AI await 后各查一次）。回归：`driver.test.ts`「auto-advances…」「stops driving when cancelled」、`fast-forward.test.ts` 重写为旁观自动确认/随时重开。
 - 基线：`tsc -b` 绿、`npm test` **145 绿**、`npm run build` 绿。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
