@@ -88,25 +88,28 @@ describe("createGameStore", () => {
     expect(state.snapshot?.gamePhase).toBe(phaseBefore);
   });
 
-  it("exportDebugLog 导出可解析的完整日志（含 summary / 全部事件 / 诊断）", async () => {
+  it("exportDebugLog 导出复盘式中文摘要（四块齐全、诊断为正常等待）", async () => {
     const db = freshDb();
     const store = createGameStore({ ai: new ScriptedAiClient(), db, now });
     await store.getState().bootstrap();
     await startFreeVillagerGame(store);
 
-    const json = store.getState().exportDebugLog();
-    const parsed = JSON.parse(json) as {
-      summary: { phase: string; eventCount: number; diagnostics: unknown };
-      events: unknown[];
-      snapshot: unknown;
-    };
+    const summary = store.getState().exportDebugLog();
 
-    expect(parsed.summary.phase).toBe("day_announcement");
-    expect(parsed.events.length).toBe(parsed.summary.eventCount);
-    expect(parsed.events.length).toBeGreaterThan(0);
-    expect(parsed.snapshot).not.toBeNull();
-    // driver 正常停在天亮播报 → 诊断为 idle（非异常）。
-    expect((parsed.summary.diagnostics as { reason: string }).reason).toBe("idle");
+    // 四个小节标题都在。
+    expect(summary).toContain("=== 小狼杀 调试摘要 ===");
+    expect(summary).toContain("【当前状态】");
+    expect(summary).toContain("【卡点分析】");
+    expect(summary).toContain("【身份真相】");
+    expect(summary).toContain("【时间线】");
+    // 真人身份行 + 相位。
+    expect(summary).toContain("天亮播报");
+    expect(summary).toContain("村民");
+    // driver 正常停在天亮播报 → 诊断显示「正常等待真人操作」，不带 ⚠️。
+    expect(summary).toContain("正常等待真人操作");
+    expect(summary).not.toContain("⚠️");
+    // 不再是 JSON。
+    expect(() => JSON.parse(summary)).toThrow();
   });
 
   it("recovers a persisted game in a fresh store on bootstrap", async () => {

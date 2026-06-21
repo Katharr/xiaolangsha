@@ -25,6 +25,7 @@ import type {
   VisibleInformationSnapshot,
 } from "../shared";
 
+import { buildDebugSummary } from "./debugSummary";
 import type { DriverHalt, DriverState, InGameTaskType } from "./driver";
 import { runAiDriver } from "./driver";
 import { deriveMessages, type ChatMessage } from "./messages";
@@ -86,8 +87,8 @@ export type GameStoreState = {
    */
   askReview: (question: string) => Promise<Result<string>>;
   /**
-   * 导出当前对局的完整调试日志（JSON 字符串）：含 session / 完整快照 / 全部 TruthEvent /
-   * 诊断信息。这是**完整真相**（含 AI 身份、夜晚密谋），仅供离线 debug，不在 UI 内展示。
+   * 导出当前对局的**复盘式中文摘要**（纯文本）：诊断头 + 卡点分析 + 身份真相 + 关键事件时间线。
+   * 含完整真相（AI 身份、夜晚密谋、查验结果），仅供离线 debug，不在 UI 内展示；比全量 JSON 小一个量级。
    */
   exportDebugLog: () => string;
 };
@@ -307,38 +308,14 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
 
       exportDebugLog: (): string => {
         const s = get();
-        const snapshot = s.snapshot;
-        // 顶部摘要：最常用来定位「卡在哪一步」的字段，放最前面便于一眼看清。
-        const summary = {
-          phase: s.phase,
-          participation: s.participation,
-          round: snapshot?.round ?? null,
+        return buildDebugSummary({
+          exportedAt: nowProvider(),
+          session: s.session,
+          snapshot: s.snapshot,
+          events: s.events,
           diagnostics: s.diagnostics,
           lastError: s.lastError,
-          busy: s.busy,
-          eventCount: s.events.length,
-          night: snapshot?.nightState
-            ? {
-                night: snapshot.nightState.night,
-                resolved: snapshot.nightState.resolved,
-                currentStepIndex: snapshot.nightState.currentStepIndex,
-                steps: snapshot.nightState.steps.map((step) => ({
-                  kind: step.kind,
-                  actorIds: step.actorIds,
-                  submittedActorIds: step.submittedActorIds,
-                })),
-              }
-            : null,
-        };
-        const payload = {
-          exportedAt: nowProvider(),
-          summary,
-          // 完整真相（含 AI 身份、夜晚密谋）——仅供离线排查。
-          session: s.session,
-          snapshot,
-          events: s.events,
-        };
-        return JSON.stringify(payload, null, 2);
+        });
       },
     };
   });

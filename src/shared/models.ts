@@ -327,6 +327,24 @@ export type ReviewNightActionRef = {
   result: Record<string, unknown>;
 };
 
+/**
+ * 玩家结局：复盘「结局速览」的数据源。每人最终生死、怎么死的、第几夜/天、责任方是谁。
+ * 由 shared/reviewOutcome.ts 的 derivePlayerOutcomes 扫事件流还原。仅 review 阶段使用。
+ */
+export type PlayerOutcome = {
+  playerId: string;
+  alive: boolean;
+  deathCause?: DeathCause;
+  /** 出局发生在第几夜或第几天的序号（配合 deathPhaseKind 决定「第N夜」还是「第N天」）。 */
+  deathRound?: number;
+  /** 死亡相位类别：夜晚（被刀/被毒）或白天（被放逐/被猎人带走）。 */
+  deathPhaseKind?: "night" | "day";
+  /** 责任方玩家 id：狼刀=全部行动狼、毒杀=女巫、猎人带走=猎人；放逐无单一凶手，留空。 */
+  killerIds: string[];
+  /** 放逐得票数（仅 deathCause==="exile" 时有）。 */
+  exileVotes?: number;
+};
+
 export type ReviewContext = {
   session: GameSession;
   players: Player[];
@@ -334,6 +352,8 @@ export type ReviewContext = {
   speeches: ReviewSpeechRef[];
   votes: ReviewVoteRef[];
   nightActions: ReviewNightActionRef[];
+  /** 每人结局（生死/死因/第几夜·天/责任方），供「结局速览」直接渲染。 */
+  outcomes: PlayerOutcome[];
   winner: Faction;
   winReason: WinReason;
 };

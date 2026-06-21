@@ -78,17 +78,17 @@ export function App({ store }: AppProps) {
     void store.getState().dispatch(action);
   };
 
-  // 调试：把本局完整日志导出成 JSON 文件，方便把卡住的局发出来排查。
+  // 调试：把本局导出成复盘式中文摘要（.txt），方便把卡住的局发出来排查。
   const exportDebugLog = () => {
-    const json = store.getState().exportDebugLog();
+    const text = store.getState().exportDebugLog();
     const snapshot = store.getState().snapshot;
     const stamp = (snapshot?.lastEventSeq ?? 0).toString().padStart(3, "0");
     const gameId = snapshot?.gameId ?? "nogame";
-    const blob = new Blob([json], { type: "application/json" });
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `wolf-debug-${gameId}-seq${stamp}.json`;
+    anchor.download = `wolf-debug-${gameId}-seq${stamp}.txt`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

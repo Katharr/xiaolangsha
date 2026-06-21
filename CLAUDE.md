@@ -60,8 +60,9 @@
 
 - **夜晚主持人播报**：`VisibleInformationSnapshot.nightStatus`（`{currentStepKind, waitingForViewer}`，由 `visibility.ts` 的 `buildNightStatus` 产出，只暴露「当前在等哪类角色」不含具体行动者身份 → 守 ISO-001）。UI 落地：`ActionArea` 夜晚等待文案 +「主持人正在等待预言家查验…」、`MessageStream` 匿名夜晚气泡同播报；标签 `NIGHT_STEP_LABEL`（labels.ts）。
 - **驱动停止诊断**：`runAiDriver` 新增 `onHalt(DriverHalt)`，区分 `idle`/`completed`（正常）与 `ai_error`/`invalid_payload`/`rule_rejected`/`max_steps`（异常卡住）；`isAbnormalHalt()` 判定。store 存 `diagnostics`，`App.tsx` 在非 busy 且异常时浮层提示「⚠️ … 请导出日志」（`.halt-banner`）。这是「天黑卡住没动静」的根因可视化。
-- **导出日志按钮**：顶部 `StatusBar` 右侧「⛏ 导出日志」→ `store.exportDebugLog()` 返回完整真相 JSON（summary 含 phase/round/diagnostics/nightState 步骤 + 全部 TruthEvent），下载成 `wolf-debug-<gameId>-seq<NNN>.json`，供离线排查。**仅 debug 用，含 AI 身份/夜晚密谋，不在局内 UI 展示。**
-- 基线：`tsc -b` 绿、`npm test` **136 绿**、`npm run build` 绿。
+- **导出日志按钮**：顶部 `StatusBar` 右侧「⛏ 导出日志」→ `store.exportDebugLog()` 返回**复盘式中文摘要（纯文本）**，由纯函数 `src/store/debugSummary.ts` 的 `buildDebugSummary` 生成：四块＝【当前状态】（相位/真人身份/停止原因/最近错误）+【卡点分析】（按相位列「在等谁出手」并标 AI/真人·角色）+【身份真相】（全员角色阵营生死）+【时间线】（关键事件中文一行，含狼刀归属/刀票/查验结果/投票票型，截断+最近 80 条）。下载成 `wolf-debug-<gameId>-seq<NNN>.txt`。比旧 JSON 小一个量级。**仍含完整真相（AI 身份/夜晚密谋），仅 debug 用，不在局内 UI 展示。**
+- **中文 label 单一来源**：领域枚举→中文映射（ROLE/PHASE/FACTION/WIN_REASON/NIGHT_STEP/DEATH_CAUSE/NIGHT_ACTION_VERB）已从 `src/ui/labels.ts` 迁到 `src/shared/labels.ts`（ui 与 store 共用，避免 store→ui 依赖环）；`ui/labels.ts` 改为再导出 + 保留 ui 专属 `TASK_THINKING_LABEL`。
+- 基线：`tsc -b` 绿、`npm test` **138 绿**、`npm run build` 绿。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 

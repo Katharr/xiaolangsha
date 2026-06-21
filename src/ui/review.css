@@ -1,0 +1,340 @@
+/* ============================================================
+   赛后复盘样式（重设计）。深色复古 + 座位着色，复用 theme.css 的 token。
+   预览基准：preview/review-mockup.html。
+   死因语义色：刀=红、毒=紫、放逐=灰、猎人=橙。
+   ============================================================ */
+.rv {
+  --death-knife: var(--seat-5);
+  --death-poison: var(--seat-4);
+  --death-exile: #8a8170;
+  --death-hunter: var(--seat-2);
+
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 8px 2px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ===== 1. 结果横幅 ===== */
+.rv-banner {
+  text-align: center;
+  padding: 24px 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: linear-gradient(180deg, rgba(111, 174, 143, 0.16), rgba(111, 174, 143, 0.04));
+  border: 1px solid rgba(111, 174, 143, 0.34);
+}
+.rv-banner.win-wolf {
+  background: linear-gradient(180deg, rgba(192, 86, 63, 0.18), rgba(192, 86, 63, 0.04));
+  border-color: rgba(192, 86, 63, 0.4);
+}
+.rv-crown {
+  font-size: 28px;
+}
+.rv-banner h1 {
+  margin: 6px 0 4px;
+  font-family: var(--serif);
+  font-size: 1.9rem;
+  letter-spacing: 0.06em;
+  color: var(--good);
+}
+.rv-banner.win-wolf h1 {
+  color: var(--danger);
+}
+.rv-reason {
+  color: var(--ink-dim);
+  font-size: 0.98rem;
+}
+
+/* ===== 通用卡片 / 标题 ===== */
+.rv-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.rv-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+}
+.rv-title::before {
+  content: "";
+  width: 4px;
+  height: 17px;
+  border-radius: 2px;
+  background: var(--gold-soft);
+}
+
+/* ===== 2. 结局速览 ===== */
+.rv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 11px;
+}
+.rv-ocard {
+  position: relative;
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  padding: 11px 13px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.rv-ocard.dead {
+  opacity: 0.82;
+}
+.rv-av {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.rv-av .av-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rv-ocard.dead .rv-av {
+  filter: grayscale(0.55) brightness(0.85);
+}
+.rv-obody {
+  flex: 1;
+  min-width: 0;
+}
+.rv-oline1 {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.rv-you {
+  font-size: 0.78rem;
+  color: var(--gold);
+}
+.rv-ometa {
+  margin-top: 2px;
+  font-size: 0.84rem;
+  color: var(--ink-dim);
+}
+.f-wolf {
+  color: var(--death-knife);
+}
+.f-good {
+  color: var(--good);
+}
+.rv-otag {
+  margin-top: 7px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.79rem;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+.rv-otag.alive {
+  color: var(--good);
+}
+.rv-otag.knife {
+  color: var(--death-knife);
+}
+.rv-otag.poison {
+  color: var(--death-poison);
+}
+.rv-otag.exile {
+  color: var(--death-exile);
+}
+.rv-otag.hunter {
+  color: var(--death-hunter);
+}
+.rv-by {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+.rv-mate {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  font-size: 0.7rem;
+  color: var(--death-knife);
+  border: 1px solid rgba(212, 104, 90, 0.5);
+  border-radius: 99px;
+  padding: 1px 7px;
+  background: rgba(212, 104, 90, 0.08);
+}
+
+/* ===== 3. 回合时间线 ===== */
+.rv-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.rv-round {
+  border-left: 2px solid var(--line);
+  padding-left: 15px;
+}
+.rv-round-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 9px -27px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+}
+.rv-round.night .rv-round-head {
+  color: var(--seat-3);
+}
+.rv-round.day .rv-round-head {
+  color: var(--gold);
+}
+.rv-events {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rv-ev {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.rv-dot {
+  position: absolute;
+  left: -22px;
+  top: 14px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px var(--bg-0);
+}
+.rv-ev.kill .rv-dot {
+  background: var(--death-knife);
+}
+.rv-ev.check .rv-dot {
+  background: var(--seat-3);
+}
+.rv-ev.death .rv-dot {
+  background: var(--death-poison);
+}
+.rv-ev.vote .rv-dot {
+  background: var(--gold-soft);
+}
+.rv-ev.win .rv-dot {
+  background: var(--good);
+}
+.rv-ev.win {
+  border-color: rgba(111, 174, 143, 0.3);
+}
+.v-wolf {
+  color: var(--danger);
+}
+.v-good {
+  color: var(--good);
+}
+
+/* 白天发言折叠 */
+.rv-speeches {
+  margin: 1px 0;
+}
+.rv-speeches > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-dim);
+  font-size: 0.84rem;
+  padding: 5px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 99px;
+  display: inline-block;
+}
+.rv-speeches > summary::-webkit-details-marker {
+  display: none;
+}
+.rv-speeches[open] > summary {
+  color: var(--gold);
+}
+.rv-speech {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--line);
+  font-size: 0.89rem;
+  line-height: 1.5;
+}
+.rv-tag {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+/* ===== 4. 追问 ===== */
+.rv-qa {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rv-qa .qa-q {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+.rv-qa .qa-a {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* ===== 5. 按钮 ===== */
+.rv-btn {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg-3);
+  color: var(--ink);
+}
+.rv-btn.primary {
+  border: none;
+  background: linear-gradient(180deg, var(--gold), var(--gold-soft));
+  color: #1b150c;
+}
+.rv-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.rv-newgame {
+  text-align: center;
+  padding-top: 2px;
+}
+.rv-newgame .rv-btn {
+  padding: 13px 40px;
+  font-size: 1.02rem;
+}

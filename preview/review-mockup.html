@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 赛后复盘预览</title>
+<style>
+  :root{
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:14px; --radius-sm:9px; --shadow:0 6px 22px rgba(0,0,0,.45);
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    /* 死因语义色 */
+    --death-knife:#d4685a;   /* 狼刀 */
+    --death-poison:#b07cc4;  /* 毒杀 */
+    --death-exile:#8a8170;   /* 放逐 */
+    --death-hunter:#d59a4e;  /* 猎人带走 */
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{
+    background:
+      radial-gradient(1400px 700px at 50% -15%, #2a2418 0%, transparent 60%),
+      var(--bg-0);
+    color:var(--ink); font-family:var(--sans);
+    min-height:100vh; padding:28px 18px 60px;
+  }
+  .wrap{ max-width:920px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
+
+  /* 名字着色组件（对应 PlayerName） */
+  .pname-n{ font-weight:700; }
+  .pname-no{ color:var(--ink-faint); font-weight:400; font-size:.84em; }
+  .self .pname-n{ color:var(--gold); }
+
+  /* ===== 1. 结果横幅 ===== */
+  .banner{
+    text-align:center; padding:26px 20px;
+    background:linear-gradient(180deg, rgba(111,174,143,.16), rgba(111,174,143,.04));
+    border:1px solid rgba(111,174,143,.34); border-radius:var(--radius); box-shadow:var(--shadow);
+  }
+  .banner.win-wolf{
+    background:linear-gradient(180deg, rgba(192,86,63,.18), rgba(192,86,63,.04));
+    border-color:rgba(192,86,63,.4);
+  }
+  .banner .crown{ font-size:30px; }
+  .banner h1{
+    margin:6px 0 4px; font-family:var(--serif); font-size:2rem; letter-spacing:.06em;
+    color:var(--good);
+  }
+  .banner.win-wolf h1{ color:var(--danger); }
+  .banner .reason{ color:var(--ink-dim); font-size:1rem; }
+
+  /* 通用区块 */
+  .sec-title{
+    display:flex; align-items:center; gap:9px; margin:0 0 12px;
+    font-family:var(--serif); font-size:1.18rem; color:var(--gold); letter-spacing:.05em;
+  }
+  .sec-title::before{ content:""; width:4px; height:18px; border-radius:2px; background:var(--gold-soft); }
+
+  /* ===== 2. 结局速览 ===== */
+  .outcome-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(250px,1fr)); gap:12px;
+  }
+  .ocard{
+    position:relative; display:flex; gap:12px; align-items:center; padding:12px 14px;
+    background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius-sm);
+  }
+  .ocard.dead{ opacity:.78; }
+  .ocard .av{
+    flex:none; width:46px; height:46px; border-radius:50%;
+    display:grid; place-items:center; font-weight:800; font-size:1.1rem; color:#1b150c;
+  }
+  .ocard.dead .av{ filter:grayscale(.55) brightness(.85); }
+  .ocard .body{ flex:1; min-width:0; }
+  .ocard .line1{ display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .ocard .meta{ margin-top:3px; font-size:.85rem; color:var(--ink-dim); }
+  .ocard .faction-wolf{ color:var(--death-knife); }
+  .ocard .faction-good{ color:var(--good); }
+  /* 结局色标 */
+  .otag{
+    margin-top:7px; display:inline-flex; align-items:center; gap:5px;
+    padding:3px 9px; border-radius:99px; font-size:.8rem; font-weight:600;
+    border:1px solid currentColor;
+  }
+  .otag.alive{ color:var(--good); }
+  .otag.knife{ color:var(--death-knife); }
+  .otag.poison{ color:var(--death-poison); }
+  .otag.exile{ color:var(--death-exile); }
+  .otag.hunter{ color:var(--death-hunter); }
+  .otag .by{ color:var(--ink-faint); font-weight:400; }
+  /* 狼队友角标 */
+  .teammate{
+    position:absolute; top:9px; right:10px; font-size:.72rem; color:var(--death-knife);
+    border:1px solid rgba(212,104,90,.5); border-radius:99px; padding:1px 7px; background:rgba(212,104,90,.08);
+  }
+  .you-badge{ font-size:.72rem; color:var(--gold); }
+
+  /* ===== 3. 回合时间线 ===== */
+  .timeline{ display:flex; flex-direction:column; gap:18px; }
+  .round{ border-left:2px solid var(--line); padding-left:16px; position:relative; }
+  .round-head{
+    display:inline-flex; align-items:center; gap:8px; margin:0 0 10px -28px;
+    padding:4px 12px; border-radius:99px; font-family:var(--serif); font-size:1rem;
+    background:var(--bg-3); border:1px solid var(--line);
+  }
+  .round.night .round-head{ color:var(--seat-3); }
+  .round.day .round-head{ color:var(--gold); }
+  .events{ display:flex; flex-direction:column; gap:7px; }
+  .ev{
+    position:relative; padding:8px 12px 8px 14px; border-radius:var(--radius-sm);
+    background:var(--bg-1); border:1px solid var(--line); font-size:.94rem; line-height:1.5;
+  }
+  .ev::before{
+    content:""; position:absolute; left:-23px; top:14px; width:9px; height:9px; border-radius:50%;
+    background:var(--ink-faint); box-shadow:0 0 0 3px var(--bg-0);
+  }
+  .ev.kill::before{ background:var(--death-knife); }
+  .ev.check::before{ background:var(--seer-c, #5b91c9); }
+  .ev.death::before{ background:var(--death-poison); }
+  .ev.vote::before{ background:var(--gold-soft); }
+  .ev.win::before{ background:var(--good); }
+  .ev .sub{ color:var(--ink-dim); font-size:.85rem; }     /* 刀票/票型等次要细节 */
+  .ev .verdict-wolf{ color:var(--death-knife); font-weight:700; }
+  .ev .verdict-good{ color:var(--good); font-weight:700; }
+  .ev .missed{ color:var(--ink-faint); }
+
+  /* 发言可折叠 */
+  details.speeches{ margin-top:8px; }
+  details.speeches > summary{
+    cursor:pointer; list-style:none; color:var(--ink-dim); font-size:.85rem;
+    padding:5px 12px; border:1px dashed var(--line); border-radius:99px; display:inline-block;
+  }
+  details.speeches > summary::-webkit-details-marker{ display:none; }
+  details.speeches[open] > summary{ color:var(--gold); }
+  .speech{
+    margin-top:7px; padding:8px 12px; background:var(--bg-2); border-radius:var(--radius-sm);
+    border-left:3px solid var(--line); font-size:.9rem; line-height:1.5;
+  }
+  .speech .tag{ color:var(--gold); font-weight:600; }
+
+  /* ===== 4. 追问 + 5. 新局 ===== */
+  .ask textarea{
+    width:100%; min-height:74px; resize:vertical; padding:11px 13px; font-family:var(--sans); font-size:.95rem;
+    background:var(--bg-1); color:var(--ink); border:1px solid var(--line); border-radius:var(--radius-sm);
+  }
+  .ask .row{ display:flex; justify-content:flex-end; margin-top:9px; }
+  .btn{
+    border:none; border-radius:var(--radius-sm); padding:10px 20px; font-size:.95rem; font-weight:600; cursor:pointer;
+    background:var(--bg-3); color:var(--ink); border:1px solid var(--line);
+  }
+  .btn.primary{ background:linear-gradient(180deg, var(--gold), var(--gold-soft)); color:#1b150c; border:none; }
+  .new-game{ text-align:center; padding-top:6px; }
+  .new-game .btn{ padding:13px 40px; font-size:1.02rem; }
+
+  .card{ background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); }
+
+  .preview-note{ max-width:920px; margin:0 auto 18px; color:var(--ink-faint); font-size:.8rem; text-align:center; }
+</style>
+</head>
+<body>
+  <div class="preview-note">静态预览 · 数据取自一局真实对局（7 人标准局，好人屠边胜）· 仅用于确认视觉与信息密度</div>
+  <div class="wrap">
+
+    <!-- 1. 结果横幅 -->
+    <div class="banner">
+      <div class="crown">🏆</div>
+      <h1>好人阵营 获胜</h1>
+      <div class="reason">屠尽所有狼人 · 共 2 天</div>
+    </div>
+
+    <!-- 2. 结局速览 -->
+    <section class="card">
+      <h2 class="sec-title">结局速览</h2>
+      <div class="outcome-grid">
+
+        <!-- 1号 囡囡 AI 狼人 被毒杀 -->
+        <div class="ocard dead">
+          <span class="teammate">🐺 你的狼队友</span>
+          <span class="av" style="background:var(--seat-1)">囡</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-1)">囡囡</span><span class="pname-no">（1号）</span></span></div>
+            <div class="meta">狼人 · <span class="faction-wolf">狼人阵营</span></div>
+            <span class="otag poison">☠️ 第2夜 被毒杀 <span class="by">· 女巫 小林</span></span>
+          </div>
+        </div>
+
+        <!-- 2号 大壮 预言家 被狼刀 -->
+        <div class="ocard dead">
+          <span class="av" style="background:var(--seat-2)">大</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-2)">大壮</span><span class="pname-no">（2号）</span></span></div>
+            <div class="meta">预言家 · <span class="faction-good">好人阵营</span></div>
+            <span class="otag knife">🔪 第2夜 被狼刀 <span class="by">· 狼队 囡囡</span></span>
+          </div>
+        </div>
+
+        <!-- 3号 小林 女巫 存活 -->
+        <div class="ocard">
+          <span class="av" style="background:var(--seat-3)">小</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-3)">小林</span><span class="pname-no">（3号）</span></span></div>
+            <div class="meta">女巫 · <span class="faction-good">好人阵营</span></div>
+            <span class="otag alive">✅ 存活到终局</span>
+          </div>
+        </div>
+
+        <!-- 4号 阿杰 你 狼人 被放逐 -->
+        <div class="ocard dead self">
+          <span class="av" style="background:var(--seat-4)">阿</span>
+          <div class="body">
+            <div class="line1">
+              <span class="pname"><span class="pname-n" style="color:var(--gold)">阿杰</span><span class="pname-no">（4号）</span></span>
+              <span class="you-badge">· 你</span>
+            </div>
+            <div class="meta">狼人 · <span class="faction-wolf">狼人阵营</span></div>
+            <span class="otag exile">⚖️ 第1天 被放逐 <span class="by">· 5 票出局</span></span>
+          </div>
+        </div>
+
+        <!-- 5号 阿明 村民 存活 -->
+        <div class="ocard">
+          <span class="av" style="background:var(--seat-5)">阿</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-5)">阿明</span><span class="pname-no">（5号）</span></span></div>
+            <div class="meta">村民 · <span class="faction-good">好人阵营</span></div>
+            <span class="otag alive">✅ 存活到终局</span>
+          </div>
+        </div>
+
+        <!-- 6号 老张 猎人 存活 -->
+        <div class="ocard">
+          <span class="av" style="background:var(--seat-6)">老</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-6)">老张</span><span class="pname-no">（6号）</span></span></div>
+            <div class="meta">猎人 · <span class="faction-good">好人阵营</span></div>
+            <span class="otag alive">✅ 存活到终局</span>
+          </div>
+        </div>
+
+        <!-- 7号 胖虎 村民 存活 (7号与1号同色) -->
+        <div class="ocard">
+          <span class="av" style="background:var(--seat-1)">胖</span>
+          <div class="body">
+            <div class="line1"><span class="pname"><span class="pname-n" style="color:var(--seat-1)">胖虎</span><span class="pname-no">（7号）</span></span></div>
+            <div class="meta">村民 · <span class="faction-good">好人阵营</span></div>
+            <span class="otag alive">✅ 存活到终局</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. 回合时间线 -->
+    <section class="card">
+      <h2 class="sec-title">对局时间线</h2>
+      <div class="timeline">
+
+        <!-- 第1夜 -->
+        <div class="round night">
+          <div class="round-head">🌙 第 1 夜</div>
+          <div class="events">
+            <div class="ev check">
+              预言家 <b style="color:var(--seat-2)">大壮（2号）</b> 查验 <b style="color:var(--gold)">阿杰（4号）</b> → <span class="verdict-wolf">狼人</span>
+            </div>
+            <div class="ev kill">
+              狼队（<b style="color:var(--gold)">阿杰（4号）</b>、<b style="color:var(--seat-1)">囡囡（1号）</b>） 击杀 <b style="color:var(--seat-5)">阿明（5号）</b><span class="missed">（未得手）</span>
+              <div class="sub">刀票：阿杰（4号）→阿明（5号），囡囡（1号）→阿明（5号）</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 第1天 -->
+        <div class="round day">
+          <div class="round-head">☀️ 第 1 天</div>
+          <div class="events">
+            <div class="ev">天亮了，昨夜 <b>平安夜</b>。</div>
+
+            <details class="speeches">
+              <summary>展开 7 条白天发言</summary>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-1)">囡囡（1号）</span>：平安夜哈，信息不多，我先听听，不想因为一个平安夜就硬盘谁像狼…</div>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-2)">大壮（2号）</span>：<span class="tag"></span>我是预言家，昨晚验的 4号阿杰，查杀，狼人阵营。这不是盘出来的，是验出来的。</div>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-3)">小林（3号）</span>：2号跳预言家给4号查杀，力度是有的，但我现在不会直接替他把4号按死…</div>
+              <div class="speech"><span class="pname-n" style="color:var(--gold)">阿杰（4号）</span>：我才是全场唯一真预言家，昨晚查了 5号，他是好人。2号肯定是悍跳狼。</div>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-5)">阿明（5号）</span>：4号给我好人，但我不会因为你给我好人就直接站你，太好拉票了。</div>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-6)">老张（6号）</span>：2号先跳给4号查杀力度在；4号反打那句"第一天有容错"我听着别扭。</div>
+              <div class="speech"><span class="pname-n" style="color:var(--seat-1)">胖虎（7号）</span>：我现在偏信2号多一点，4号被查杀后跳预言家那个"容错"也站不住。</div>
+            </details>
+
+            <div class="ev vote">
+              投票：<b style="color:var(--gold)">阿杰（4号）</b> 被放逐
+              <span class="sub">（大壮（2号） 2票，阿杰（4号） 5票）</span>
+              <div class="sub">票型：囡囡→大壮，大壮→阿杰，小林→阿杰，阿明→阿杰，老张→阿杰，胖虎→阿杰，阿杰→大壮</div>
+            </div>
+            <div class="ev">
+              <b style="color:var(--gold)">阿杰（4号）</b><span class="tag" style="color:var(--gold)">【遗言】</span>：「服了，预言家没了我看你们怎么玩，输了」
+            </div>
+          </div>
+        </div>
+
+        <!-- 第2夜 -->
+        <div class="round night">
+          <div class="round-head">🌙 第 2 夜</div>
+          <div class="events">
+            <div class="ev check">
+              预言家 <b style="color:var(--seat-2)">大壮（2号）</b> 查验 <b style="color:var(--seat-1)">囡囡（1号）</b> → <span class="verdict-wolf">狼人</span>
+            </div>
+            <div class="ev kill">
+              狼队（<b style="color:var(--seat-1)">囡囡（1号）</b>） 击杀 <b style="color:var(--seat-2)">大壮（2号）</b>
+              <div class="sub">刀票：囡囡（1号）→大壮（2号）</div>
+            </div>
+            <div class="ev death">
+              <b style="color:var(--seat-2)">大壮（2号）</b> 夜里出局（被狼刀）
+            </div>
+            <div class="ev death">
+              <b style="color:var(--seat-1)">囡囡（1号）</b> 被女巫毒杀
+            </div>
+            <div class="ev win">
+              胜负判定：<span class="verdict-good">好人阵营获胜</span>（屠尽所有狼人）
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. 追问 -->
+    <section class="card ask">
+      <h2 class="sec-title">向 AI 追问</h2>
+      <textarea placeholder="向 AI 玩家追问，例如：你为什么投我？女巫第2夜为什么选择毒我队友？"></textarea>
+      <div class="row"><button class="btn primary">提交追问</button></div>
+    </section>
+
+    <!-- 5. 新局 -->
+    <div class="new-game">
+      <button class="btn primary">开始新局</button>
+    </div>
+
+  </div>
+</body>
+</html>

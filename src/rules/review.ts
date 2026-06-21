@@ -1,14 +1,15 @@
-import type {
-  Faction,
-  GameSession,
-  Player,
-  ReviewContext,
-  ReviewNightActionRef,
-  ReviewSpeechRef,
-  ReviewVoteRef,
-  TruthEvent,
-  VoteChoiceType,
-  WinReason,
+import {
+  derivePlayerOutcomes,
+  type Faction,
+  type GameSession,
+  type Player,
+  type ReviewContext,
+  type ReviewNightActionRef,
+  type ReviewSpeechRef,
+  type ReviewVoteRef,
+  type TruthEvent,
+  type VoteChoiceType,
+  type WinReason,
 } from "../shared";
 
 /**
@@ -25,6 +26,7 @@ export function buildReviewContext(
   const speeches = events.flatMap(toReviewSpeech);
   const votes = events.flatMap(toReviewVote);
   const nightActions = events.flatMap(toReviewNightAction);
+  const outcomes = derivePlayerOutcomes(players, events);
   const outcome = resolveOutcome(events, players);
 
   return {
@@ -34,6 +36,7 @@ export function buildReviewContext(
     speeches,
     votes,
     nightActions,
+    outcomes,
     winner: outcome.winner,
     winReason: outcome.winReason,
   };

@@ -1,10 +1,23 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
-import type { GameAction, Player, Result, ReviewContext } from "../shared";
+import type {
+  GameAction,
+  NarrationSegment,
+  Player,
+  PlayerOutcome,
+  Result,
+  ReviewContext,
+  ReviewSpeechRef,
+  TruthEvent,
+} from "../shared";
+import { narrateEvent } from "../shared";
 import { toUserMessage } from "../store";
 
+import { Avatar } from "./Avatar";
 import { FACTION_LABEL, ROLE_LABEL, WIN_REASON_LABEL } from "./labels";
+import { PlayerName } from "./PlayerName";
 import { TextInput } from "./TextInput";
+import "./review.css";
 
 export type ReviewPanelProps = {
   reviewContext: ReviewContext;
@@ -17,9 +30,18 @@ export type ReviewPanelProps = {
 
 type QaEntry = { id: number; question: string; answer: string };
 
+/** 时间线里不单独成行的事件：发言并入折叠区；胜负/开局由横幅与速览覆盖。 */
+const TIMELINE_SKIP = new Set([
+  "speech_submitted",
+  "tie_speech_submitted",
+  "win_checked",
+  "game_ended",
+  "game_created",
+]);
+
 /**
  * 复盘面板：仅 review 阶段渲染 store 组装的完整真相（ISO-002 由 store 在调用点保证）。
- * 展示真实身份、夜晚行动、投票、发言原文、胜负，并提供向 AI 追问的入口。
+ * 自上而下＝结果横幅 → 结局速览（谁怎么死的、谁干的）→ 回合叙事时间线 → 向 AI 追问。
  */
 export function ReviewPanel({
   reviewContext,
@@ -32,12 +54,61 @@ export function ReviewPanel({
   const [qaLog, setQaLog] = useState<QaEntry[]>([]);
   const [qaId, setQaId] = useState(0);
 
-  const labelOf = (id: string): string => {
-    const player = reviewContext.players.find((p) => p.playerId === id);
-    return player ? `${player.name}（${player.seat}号）` : "某玩家";
+  const byId = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of reviewContext.players) {
+      map.set(p.playerId, p);
+    }
+    return map;
+  }, [reviewContext.players]);
+
+  // 真人是狼时，标出其余狼为「你的狼队友」（复盘可见完整真相）。
+  const teammateIds = useMemo(() => {
+    const human = byId.get(humanPlayerId);
+    if (human?.role !== "werewolf") {
+      return new Set<string>();
+    }
+    return new Set(
+      reviewContext.players
+        .filter((p) => p.role === "werewolf" && p.playerId !== humanPlayerId)
+        .map((p) => p.playerId),
+    );
+  }, [byId, humanPlayerId, reviewContext.players]);
+
+  const sortedPlayers = useMemo(
+    () => [...reviewContext.players].sort((a, b) => a.seat - b.seat),
+    [reviewContext.players],
+  );
+  const outcomeById = useMemo(() => {
+    const map = new Map<string, PlayerOutcome>();
+    for (const o of reviewContext.outcomes) {
+      map.set(o.playerId, o);
+    }
+    return map;
+  }, [reviewContext.outcomes]);
+
+  const rounds = useMemo(
+    () => groupTimeline(reviewContext.events),
+    [reviewContext.events],
+  );
+
+  const renderName = (playerId: string) => {
+    const p = byId.get(playerId);
+    return p ? (
+      <PlayerName name={p.name} seat={p.seat} isSelf={p.isHuman} />
+    ) : (
+      <span className="pname">某玩家</span>
+    );
   };
 
-  const sortedPlayers = [...reviewContext.players].sort((a, b) => a.seat - b.seat);
+  const renderSegments = (segs: NarrationSegment[]) =>
+    segs.map((s, i) =>
+      typeof s === "string" ? (
+        <span key={i}>{s}</span>
+      ) : (
+        <span key={i}>{renderName(s.playerId)}</span>
+      ),
+    );
 
   const handleAsk = async (question: string): Promise<boolean> => {
     const result = await askReview(question);
@@ -48,140 +119,68 @@ export function ReviewPanel({
     return result.ok;
   };
 
+  const winWolf = reviewContext.winner === "werewolf_team";
+
   return (
-    <div className="review-panel" aria-label="复盘">
-      <section className="review-section">
-        <h2>对局结果</h2>
-        <p className="review-outcome">
-          {FACTION_LABEL[reviewContext.winner]}获胜 —— {WIN_REASON_LABEL[reviewContext.winReason]}
-        </p>
-      </section>
+    <div className="rv" aria-label="复盘">
+      {/* 1. 结果横幅 */}
+      <div className={`rv-banner${winWolf ? " win-wolf" : ""}`}>
+        <div className="rv-crown">{winWolf ? "🐺" : "🏆"}</div>
+        <h1>{FACTION_LABEL[reviewContext.winner]} 获胜</h1>
+        <div className="rv-reason">{WIN_REASON_LABEL[reviewContext.winReason]}</div>
+      </div>
 
-      <section className="review-section">
-        <h2>身份真相</h2>
-        <ul className="review-list">
-          {sortedPlayers.map((player: Player) => (
-            <li key={player.playerId}>
-              {player.name}（{player.seat}号）{player.isHuman ? "·你" : ""} ·{" "}
-              {ROLE_LABEL[player.role]} · {FACTION_LABEL[player.faction]} ·{" "}
-              {player.alive ? "存活" : "出局"}
-            </li>
+      {/* 2. 结局速览 */}
+      <section className="rv-card">
+        <h2 className="rv-title">结局速览</h2>
+        <div className="rv-grid">
+          {sortedPlayers.map((player) => (
+            <OutcomeCard
+              key={player.playerId}
+              player={player}
+              outcome={outcomeById.get(player.playerId)}
+              isTeammate={teammateIds.has(player.playerId)}
+              renderName={renderName}
+            />
           ))}
-        </ul>
+        </div>
       </section>
 
-      <section className="review-section">
-        <h2>夜晚行动</h2>
-        {reviewContext.nightActions.length === 0 ? (
-          <p className="review-empty">无夜晚行动记录。</p>
-        ) : (
-          <ul className="review-list">
-            {reviewContext.nightActions.map((night) => {
-              const verb =
-                night.actionType === "werewolf_kill"
-                  ? "击杀"
-                  : night.actionType === "seer_check"
-                    ? "查验"
-                    : night.actionType === "guard_protect"
-                      ? "守护"
-                      : night.actionType === "witch_save"
-                        ? "用解药救"
-                        : night.actionType === "witch_poison"
-                          ? "用毒药毒"
-                          : "行动";
-              const faction =
-                night.result?.factionResult === "werewolf_team"
-                  ? "（狼人）"
-                  : night.result?.factionResult === "good_team"
-                    ? "（好人）"
-                    : "";
-              // 狼刀是团队行动：展示参与的全部狼 + 各自的刀票，而非笼统的「某玩家」。
-              const actorText =
-                night.actorIds && night.actorIds.length > 0
-                  ? `狼队（${night.actorIds.map(labelOf).join("、")}）`
-                  : labelOf(night.actorId);
-              const wolfVotes =
-                night.actionType === "werewolf_kill" &&
-                night.result?.wolfVotes &&
-                typeof night.result.wolfVotes === "object"
-                  ? (night.result.wolfVotes as Record<string, string>)
-                  : null;
-              const wolfVotesText = wolfVotes
-                ? Object.entries(wolfVotes)
-                    .map(([wolfId, targetId]) => `${labelOf(wolfId)}→${labelOf(targetId)}`)
-                    .join("，")
-                : "";
-              // 狼刀是否得手（被守卫守护/女巫救则未得手），也是复盘该看到的细节。
-              const killMissed =
-                night.actionType === "werewolf_kill" && night.result?.killed === false;
-              return (
-                <li key={night.eventId}>
-                  第 {night.night} 夜：{actorText} {verb}{" "}
-                  {night.targetId ? labelOf(night.targetId) : "（无目标）"}
-                  {killMissed ? "（未得手）" : ""}
-                  {faction}
-                  {wolfVotesText ? `（刀票：${wolfVotesText}）` : ""}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+      {/* 3. 回合叙事时间线 */}
+      <section className="rv-card">
+        <h2 className="rv-title">对局时间线</h2>
+        <div className="rv-timeline">
+          {rounds.map((round) => (
+            <RoundBlock
+              key={`${round.kind}-${round.n}`}
+              round={round}
+              speeches={reviewContext.speeches}
+              renderSegments={renderSegments}
+              renderName={renderName}
+            />
+          ))}
+          <div className="rv-ev win">
+            <span className="rv-dot" />
+            <span>
+              终局：
+              <b className={winWolf ? "v-wolf" : "v-good"}>
+                {FACTION_LABEL[reviewContext.winner]}获胜
+              </b>
+              （{WIN_REASON_LABEL[reviewContext.winReason]}）
+            </span>
+          </div>
+        </div>
       </section>
 
-      <section className="review-section">
-        <h2>投票记录</h2>
-        {reviewContext.votes.length === 0 ? (
-          <p className="review-empty">无投票记录。</p>
-        ) : (
-          <ul className="review-list">
-            {reviewContext.votes.map((vote) => (
-              <li key={vote.eventId}>
-                第 {vote.day} 天
-                {vote.voteRound === "tie_break" ? "（二次）" : ""}：
-                {labelOf(vote.voterId)} →{" "}
-                {vote.choiceType === "abstain"
-                  ? "弃票"
-                  : vote.targetId
-                    ? labelOf(vote.targetId)
-                    : "（无）"}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="review-section">
-        <h2>发言记录</h2>
-        {reviewContext.speeches.length === 0 ? (
-          <p className="review-empty">无发言记录。</p>
-        ) : (
-          <ul className="review-list">
-            {reviewContext.speeches.map((speech) => {
-              const tag =
-                speech.speechKind === "last_words"
-                  ? "【遗言】"
-                  : speech.speechKind === "tie_speech"
-                    ? "【拉票】"
-                    : "";
-              return (
-                <li key={speech.eventId}>
-                  第 {speech.day} 天 {labelOf(speech.speakerId)}：{tag}
-                  {speech.text}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="review-section">
-        <h2>向 AI 追问</h2>
+      {/* 4. 向 AI 追问 */}
+      <section className="rv-card">
+        <h2 className="rv-title">向 AI 追问</h2>
         {qaLog.length > 0 ? (
-          <ul className="review-qa">
+          <ul className="rv-qa">
             {qaLog.map((entry) => (
               <li key={entry.id}>
-                <p className="qa-question">问：{entry.question}</p>
-                <p className="qa-answer">答：{entry.answer}</p>
+                <p className="qa-q">问：{entry.question}</p>
+                <p className="qa-a">答：{entry.answer}</p>
               </li>
             ))}
           </ul>
@@ -190,27 +189,241 @@ export function ReviewPanel({
           enabled
           busy={busy}
           maxLength={300}
-          placeholder="向 AI 玩家追问，例如：你为什么投我？"
+          placeholder="向 AI 玩家追问，例如：你为什么投我？女巫为什么毒我队友？"
           submitLabel="提交追问"
           emptyHint="追问不能为空，且不能超过 300 字。"
           onSubmit={handleAsk}
         />
       </section>
 
-      <button
-        type="button"
-        className="new-game-button"
-        disabled={busy}
-        onClick={() =>
-          act({
-            type: "confirm_new_game",
-            idempotencyKey: nextKey("newgame"),
-            playerId: humanPlayerId,
-          })
-        }
-      >
-        开始新局
-      </button>
+      {/* 5. 开始新局 */}
+      <div className="rv-newgame">
+        <button
+          type="button"
+          className="rv-btn primary"
+          disabled={busy}
+          onClick={() =>
+            act({
+              type: "confirm_new_game",
+              idempotencyKey: nextKey("newgame"),
+              playerId: humanPlayerId,
+            })
+          }
+        >
+          开始新局
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OutcomeCard({
+  player,
+  outcome,
+  isTeammate,
+  renderName,
+}: {
+  player: Player;
+  outcome?: PlayerOutcome;
+  isTeammate: boolean;
+  renderName: (id: string) => ReactNode;
+}) {
+  const dead = !player.alive;
+  const tag = outcomeTag(outcome);
+  return (
+    <div className={`rv-ocard${dead ? " dead" : ""}${player.isHuman ? " self" : ""}`}>
+      {isTeammate ? <span className="rv-mate">🐺 你的狼队友</span> : null}
+      <Avatar seat={player.seat} className="rv-av" />
+      <div className="rv-obody">
+        <div className="rv-oline1">
+          <PlayerName name={player.name} seat={player.seat} isSelf={player.isHuman} />
+          {player.isHuman ? <span className="rv-you">· 你</span> : null}
+        </div>
+        <div className="rv-ometa">
+          {ROLE_LABEL[player.role]} ·{" "}
+          <span className={player.faction === "werewolf_team" ? "f-wolf" : "f-good"}>
+            {FACTION_LABEL[player.faction]}
+          </span>
+        </div>
+        <span className={`rv-otag ${tag.cls}`}>
+          {tag.icon} {tag.text}
+          {tag.killerIds && tag.killerIds.length > 0 ? (
+            <span className="rv-by">
+              · {tag.byPrefix}
+              {tag.killerIds.map((id, i) => (
+                <span key={id}>
+                  {i > 0 ? "、" : ""}
+                  {renderName(id)}
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {tag.suffix ? <span className="rv-by">· {tag.suffix}</span> : null}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+type Tag = {
+  cls: string;
+  icon: string;
+  text: string;
+  byPrefix?: string;
+  killerIds?: string[];
+  suffix?: string;
+};
+
+/** 把 PlayerOutcome 折成结局色标（图标 / 文案 / 责任方）。 */
+function outcomeTag(outcome?: PlayerOutcome): Tag {
+  if (!outcome || outcome.alive) {
+    return { cls: "alive", icon: "✅", text: "存活到终局" };
+  }
+  const when =
+    outcome.deathRound !== undefined
+      ? outcome.deathPhaseKind === "night"
+        ? `第${outcome.deathRound}夜 `
+        : `第${outcome.deathRound}天 `
+      : "";
+  switch (outcome.deathCause) {
+    case "night_kill":
+      return {
+        cls: "knife",
+        icon: "🔪",
+        text: `${when}被狼刀`,
+        byPrefix: "狼队 ",
+        killerIds: outcome.killerIds,
+      };
+    case "poison":
+      return {
+        cls: "poison",
+        icon: "☠️",
+        text: `${when}被毒杀`,
+        byPrefix: "女巫 ",
+        killerIds: outcome.killerIds,
+      };
+    case "exile":
+      return {
+        cls: "exile",
+        icon: "⚖️",
+        text: `${when}被放逐`,
+        suffix:
+          outcome.exileVotes !== undefined ? `${outcome.exileVotes} 票出局` : undefined,
+      };
+    case "hunter_shot":
+      return {
+        cls: "hunter",
+        icon: "🎯",
+        text: `${when}被猎人带走`,
+        byPrefix: "猎人 ",
+        killerIds: outcome.killerIds,
+      };
+    default:
+      return { cls: "exile", icon: "💀", text: `${when}出局` };
+  }
+}
+
+type RoundGroup = {
+  kind: "night" | "day";
+  n: number;
+  day: number;
+  events: { event: TruthEvent; segs: NarrationSegment[] }[];
+};
+
+/** 把事件流按「第N夜 / 第N天」分组，过滤发言与胜负噪声（由横幅/折叠区覆盖）。 */
+function groupTimeline(events: TruthEvent[]): RoundGroup[] {
+  const groups: RoundGroup[] = [];
+  let current: RoundGroup | null = null;
+  for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (TIMELINE_SKIP.has(event.type)) {
+      continue;
+    }
+    const segs = narrateEvent(event);
+    if (!segs) {
+      continue;
+    }
+    const kind: "night" | "day" =
+      event.phase === "night_action" ? "night" : "day";
+    const n = kind === "night" ? event.round.night : event.round.day;
+    if (!current || current.kind !== kind || current.n !== n) {
+      current = { kind, n, day: event.round.day, events: [] };
+      groups.push(current);
+    }
+    current.events.push({ event, segs });
+  }
+  return groups;
+}
+
+function RoundBlock({
+  round,
+  speeches,
+  renderSegments,
+  renderName,
+}: {
+  round: RoundGroup;
+  speeches: ReviewSpeechRef[];
+  renderSegments: (segs: NarrationSegment[]) => ReactNode;
+  renderName: (id: string) => ReactNode;
+}) {
+  // 白天发言折叠：announcement 之后、其余事件（投票/遗言）之前插入。
+  const daySpeeches =
+    round.kind === "day"
+      ? speeches.filter(
+          (s) => s.day === round.day && s.speechKind !== "last_words",
+        )
+      : [];
+  const announce = round.events.filter((e) => e.event.type === "day_announced");
+  const rest = round.events.filter((e) => e.event.type !== "day_announced");
+
+  const evClass = (event: TruthEvent): string => {
+    switch (event.type) {
+      case "night_action_resolved":
+        return event.payload.actionType === "werewolf_kill"
+          ? "kill"
+          : event.payload.actionType === "seer_check"
+            ? "check"
+            : "";
+      case "player_died":
+        return "death";
+      case "vote_resolved":
+        return "vote";
+      case "last_words_submitted":
+        return "words";
+      default:
+        return "";
+    }
+  };
+
+  const line = (item: { event: TruthEvent; segs: NarrationSegment[] }) => (
+    <div className={`rv-ev ${evClass(item.event)}`} key={item.event.eventId}>
+      <span className="rv-dot" />
+      <span className="rv-evtext">{renderSegments(item.segs)}</span>
+    </div>
+  );
+
+  return (
+    <div className={`rv-round ${round.kind}`}>
+      <div className="rv-round-head">
+        {round.kind === "night" ? `🌙 第 ${round.n} 夜` : `☀️ 第 ${round.n} 天`}
+      </div>
+      <div className="rv-events">
+        {announce.map(line)}
+        {daySpeeches.length > 0 ? (
+          <details className="rv-speeches">
+            <summary>展开 {daySpeeches.length} 条白天发言</summary>
+            {daySpeeches.map((s) => (
+              <div className="rv-speech" key={s.eventId}>
+                {renderName(s.speakerId)}
+                {s.speechKind === "tie_speech" ? (
+                  <span className="rv-tag">【拉票】</span>
+                ) : null}
+                ：{s.text}
+              </div>
+            ))}
+          </details>
+        ) : null}
+        {rest.map(line)}
+      </div>
     </div>
   );
 }
