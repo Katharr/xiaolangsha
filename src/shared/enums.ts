@@ -37,7 +37,6 @@ export const gamePhases = [
   "tie_speech",
   "tie_vote",
   "exile_last_words",
-  "fast_forwarding",
   "review",
 ] as const;
 export type GamePhase = (typeof gamePhases)[number];
@@ -45,7 +44,6 @@ export type GamePhase = (typeof gamePhases)[number];
 export const humanParticipationStates = [
   "alive",
   "dead_spectating",
-  "fast_forwarded",
 ] as const;
 export type HumanParticipationState =
   (typeof humanParticipationStates)[number];

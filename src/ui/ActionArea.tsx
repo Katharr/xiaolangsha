@@ -112,37 +112,28 @@ export function ActionArea({
     </div>
   );
 
-  // 死亡旁观（非复盘）：全程只读，仅提供快进 / 继续旁观。
+  // 死亡旁观（非复盘）：全程只读。对局由 AI 自动打到结束，真人可静候到结局复盘，
+  // 也可随时直接重开一局（按钮不受 busy 禁用，方便观战途中立即开新局）。
   if (participation === "dead_spectating" && phase !== "review") {
     return (
       <div className="action-area" aria-label="操作区">
-        <p className="action-hint">你已出局，正在旁观。</p>
+        <p className="action-hint">
+          你已出局，正在旁观。对局将自动进行，结束后可查看复盘。
+        </p>
         <div className="action-row">
           <button
             type="button"
-            disabled={busy}
             onClick={() =>
               act({
-                type: "request_fast_forward",
-                idempotencyKey: nextKey("ff"),
+                type: "confirm_new_game",
+                idempotencyKey: nextKey("newgame"),
                 playerId: humanPlayerId,
               })
             }
           >
-            快进到结局
-          </button>
-          <button type="button" disabled={busy}>
-            继续旁观
+            直接重开一局
           </button>
         </div>
-      </div>
-    );
-  }
-
-  if (phase === "fast_forwarding" || participation === "fast_forwarded") {
-    return (
-      <div className="action-area" aria-label="操作区">
-        <p className="action-hint">正在自动推进至结局…</p>
       </div>
     );
   }

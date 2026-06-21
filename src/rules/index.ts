@@ -109,8 +109,6 @@ export function applyAction(
       return submitTieSpeech(validAction, context, previousEvents);
     case "submit_last_words":
       return submitLastWords(validAction, context, previousEvents);
-    case "request_fast_forward":
-      return requestFastForward(validAction, context, previousEvents);
     case "confirm_new_game":
       return confirmNewGame(validAction, context, previousEvents);
     default:
@@ -1241,17 +1239,17 @@ function confirmDayAnnouncement(
   );
   const participation = context.snapshot.humanParticipationState;
   // An alive human confirms during normal play; once the human is dead and
-  // fast-forwarding, the store re-issues this confirmation on their behalf so
-  // the day announcement does not deadlock with no living confirmer.
+  // spectating, the store (AI driver) re-issues this confirmation on their
+  // behalf so the day announcement does not deadlock with no living confirmer.
   const isAliveHumanTurn =
     humanPlayer?.isHuman && humanPlayer.alive && participation === "alive";
-  const isFastForward = participation === "fast_forwarded";
+  const isSpectatorAutoConfirm = participation === "dead_spectating";
 
   if (
     context.snapshot.gamePhase !== "day_announcement" ||
     context.session.humanPlayerId !== action.playerId ||
     !humanPlayer?.isHuman ||
-    !(isAliveHumanTurn || isFastForward)
+    !(isAliveHumanTurn || isSpectatorAutoConfirm)
   ) {
     return rulesError("ACTION_NOT_ALLOWED", "Day announcement cannot be confirmed now.");
   }
@@ -2341,71 +2339,6 @@ function getCurrentVoteSubmissions(
   });
 }
 
-function requestFastForward(
-  action: Extract<GameAction, { type: "request_fast_forward" }>,
-  context: RuleEngineContext,
-  previousEvents: TruthEvent[],
-): Result<RuleEngineSuccess> {
-  if (!context.session || !context.snapshot) {
-    return rulesError("INVALID_ACTION", "Fast forward requires an existing game.");
-  }
-
-  const snapshot = context.snapshot;
-  const human = snapshot.players.find((player) => player.isHuman);
-
-  // Only the human, only once they are dead and still spectating. The engine
-  // never simulates here; flipping participation to "fast_forwarded" tells the
-  // store to drive the remaining AI turns (and re-issue day-announcement
-  // confirmations) until the game reaches review.
-  if (
-    context.session.humanPlayerId !== action.playerId ||
-    !human ||
-    human.alive ||
-    snapshot.humanParticipationState !== "dead_spectating"
-  ) {
-    return rulesError("ACTION_NOT_ALLOWED", "Fast forward is not allowed now.");
-  }
-
-  const nextSeq = snapshot.lastEventSeq + 1;
-  const event = buildEvent({
-    gameId: context.session.gameId,
-    seq: nextSeq,
-    type: "fast_forward_requested",
-    phase: snapshot.gamePhase,
-    source: "human",
-    actorId: action.playerId,
-    payload: {
-      playerId: action.playerId,
-      fromPhase: snapshot.gamePhase,
-    },
-    idempotencyKey: action.idempotencyKey,
-    now: context.now,
-    round: snapshot.round,
-    visibility: {
-      public: false,
-      visibleTo: [action.playerId],
-      revealInReview: true,
-    },
-  });
-  const nextSnapshot: GameSnapshot = {
-    ...snapshot,
-    lastEventSeq: nextSeq,
-    humanParticipationState: "fast_forwarded",
-  };
-  const session = updateSessionSeq(context.session, nextSnapshot);
-
-  return ok({
-    session,
-    events: [event],
-    snapshot: nextSnapshot,
-    visibleInformation: buildVisibleInformation(action.playerId, nextSnapshot, [
-      ...previousEvents,
-      event,
-    ]),
-    nextPendingAction: nextSnapshot.pendingAction,
-  });
-}
-
 function confirmNewGame(
   action: Extract<GameAction, { type: "confirm_new_game" }>,
   context: RuleEngineContext,
@@ -2415,8 +2348,18 @@ function confirmNewGame(
     return rulesError("INVALID_ACTION", "Starting a new game requires an existing game.");
   }
 
-  if (context.snapshot.gamePhase !== "review") {
-    return rulesError("ACTION_NOT_ALLOWED", "A new game can only be started from review.");
+  // Allowed at review (normal "play again"), or mid-game once the human is dead
+  // and spectating — a dead player may abandon the current game and restart at
+  // any time without waiting for the AI to finish playing it out.
+  const fromPhase = context.snapshot.gamePhase;
+  if (
+    fromPhase !== "review" &&
+    context.snapshot.humanParticipationState !== "dead_spectating"
+  ) {
+    return rulesError(
+      "ACTION_NOT_ALLOWED",
+      "A new game can only be started from review or while spectating after death.",
+    );
   }
 
   if (context.session.humanPlayerId !== action.playerId) {
@@ -2428,11 +2371,11 @@ function confirmNewGame(
     gameId: context.session.gameId,
     seq: nextSeq,
     type: "phase_changed",
-    phase: "review",
+    phase: fromPhase,
     source: "human",
     actorId: action.playerId,
     payload: {
-      fromPhase: "review",
+      fromPhase,
       toPhase: "mode_select",
       reason: "new_game_confirmed",
     },

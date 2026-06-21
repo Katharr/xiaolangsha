@@ -37,7 +37,6 @@ export const PHASE_LABEL: Record<GamePhase, string> = {
   tie_speech: "拉票发言",
   tie_vote: "二次投票",
   exile_last_words: "放逐遗言",
-  fast_forwarding: "快进中",
   review: "复盘",
 };
 

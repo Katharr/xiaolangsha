@@ -205,16 +205,11 @@ describe("runAiDriver", () => {
     }
   });
 
-  it("fast-forwards a dead human all the way to review with a winner", async () => {
+  it("auto-advances a dead spectating human all the way to review", async () => {
     const ai = new ScriptedAiClient();
-    let state = reachHumanDeadSpectating();
-
-    state = step(state, {
-      type: "request_fast_forward",
-      idempotencyKey: "drv-ff",
-      playerId: humanPlayerId,
-    });
-    expect(state.snapshot.humanParticipationState).toBe("fast_forwarded");
+    const state = reachHumanDeadSpectating();
+    // 出局即旁观：无需任何「快进」动作，driver 自动接管推进。
+    expect(state.snapshot.humanParticipationState).toBe("dead_spectating");
 
     const driven = await runAiDriver(state, { ai, humanPlayerId, now });
 
@@ -223,6 +218,24 @@ describe("runAiDriver", () => {
     expect(driven.snapshot.winner).toBeDefined();
     // 真人始终未被分配 pendingAction。
     expect(driven.snapshot.pendingAction ?? null).toBeNull();
+  });
+
+  it("stops driving immediately when cancelled (e.g. human restarts mid-spectate)", async () => {
+    const ai = new ScriptedAiClient();
+    const spy = vi.spyOn(ai, "respond");
+    const state = reachHumanDeadSpectating();
+
+    const driven = await runAiDriver(state, {
+      ai,
+      humanPlayerId,
+      now,
+      isCancelled: () => true,
+    });
+
+    // 一上来就被作废：不调用 AI、不推进，原样返回。
+    expect(spy).not.toHaveBeenCalled();
+    expect(driven.snapshot.gamePhase).toBe(state.snapshot.gamePhase);
+    expect(driven.events).toBe(state.events);
   });
 
   it("keeps the game running when the primary AI fails (scripted fallback)", async () => {

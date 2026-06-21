@@ -41,7 +41,7 @@ export type DriverState = {
 /**
  * 下一步驱动动作：
  * - `ai`：某个 AI 玩家需要经 LLM/脚本决策。
- * - `auto_confirm_day`：真人已死且在快进中，由 driver 代为确认天亮播报，避免死锁。
+ * - `auto_confirm_day`：真人已死、旁观中，由 driver 代为确认天亮播报，避免死锁。
  */
 export type DriverStep =
   | { kind: "ai"; actorId: string; taskType: InGameTaskType }
@@ -77,8 +77,10 @@ export function isAbnormalHalt(halt: DriverHalt | null): boolean {
 }
 
 /**
- * 根据当前快照决定 driver 下一步要替谁出手；返回 null 表示该停（轮到真人、
- * 真人已死但未快进、或已到终局/设置阶段）。投票与夜晚是并行模型——按未提交者挑第一个 AI。
+ * 根据当前快照决定 driver 下一步要替谁出手；返回 null 表示该停（轮到存活真人、
+ * 或已到终局/设置阶段）。真人一旦出局（dead_spectating），driver 会自动接管全部推进
+ * （含代为确认天亮播报），把对局一路打到 review 供旁观/复盘。
+ * 投票与夜晚是并行模型——按未提交者挑第一个 AI。
  */
 export function nextDriverStep(
   state: DriverState,
@@ -92,7 +94,9 @@ export function nextDriverStep(
 
   const playerById = (id: string) =>
     snapshot.players.find((player) => player.playerId === id);
-  const isFastForward = snapshot.humanParticipationState === "fast_forwarded";
+  // 真人已出局：driver 全自动推进（代确认天亮、AI 猎人开枪等），真人只旁观。
+  const humanDeadSpectating =
+    snapshot.humanParticipationState === "dead_spectating";
 
   switch (snapshot.gamePhase) {
     case "night_action": {
@@ -130,16 +134,16 @@ export function nextDriverStep(
       if (!player) {
         return null;
       }
-      // AI 猎人自动开枪；真人猎人由 UI 决定，除非真人已死且正在快进。
-      if (player.controller === "ai" || isFastForward) {
+      // AI 猎人自动开枪；真人猎人由 UI 决定，除非真人已出局（旁观）由 driver 代行。
+      if (player.controller === "ai" || humanDeadSpectating) {
         return { kind: "ai", actorId, taskType: "hunter_shoot" };
       }
       return null;
     }
 
     case "day_announcement": {
-      // 真人存活时由真人在 UI 确认；只有真人已死并选择快进时 driver 代为确认。
-      return isFastForward
+      // 真人存活时由真人在 UI 确认；真人已出局后由 driver 代为确认，避免无人确认死锁。
+      return humanDeadSpectating
         ? { kind: "auto_confirm_day", playerId: humanPlayerId }
         : null;
     }
@@ -176,7 +180,7 @@ export function nextDriverStep(
     }
 
     default:
-      // mode_select / role_setup / role_reveal / fast_forwarding / review：driver 不介入。
+      // mode_select / role_setup / role_reveal / review：driver 不介入。
       return null;
   }
 }
@@ -336,6 +340,11 @@ export type DriverOptions = {
   /** 循环结束时回报停下的原因（诊断用：正常等真人 / 还是异常卡住）。 */
   onHalt?: (halt: DriverHalt) => void;
   /**
+   * 每步开始前查询是否应中止本次驱动（返回 true 即停）。用于「真人旁观中途重开一局」：
+   * 新对局开始会令旧的 in-flight 驱动作废，避免它把已经重置的 store 状态覆盖回去。
+   */
+  isCancelled?: () => boolean;
+  /**
    * AI 返回的动作被规则拒绝、改用脚本安全动作顶上时触发（诊断用）。
    * 触发不代表卡死——流程已用合法动作继续；只是记录「这一步 LLM 出了非法动作」。
    */
@@ -349,8 +358,8 @@ export type DriverOptions = {
 };
 
 /**
- * 自动轮转循环：反复替 AI（及快进时的天亮确认）出手，直到轮到真人、真人已死未快进、
- * 或到达 review/终局。每步都走规则引擎 `applyAction`，规则拒绝即停（防死循环）。
+ * 自动轮转循环：反复替 AI（及真人出局后旁观时的天亮确认）出手，直到轮到存活真人、
+ * 被作废（isCancelled）、或到达 review/终局。每步都走规则引擎 `applyAction`，规则拒绝即停（防死循环）。
  */
 export async function runAiDriver(
   initial: DriverState,
@@ -362,6 +371,11 @@ export async function runAiDriver(
   let halt: DriverHalt = { reason: "max_steps" };
 
   for (let stepCount = 0; stepCount < maxSteps; stepCount += 1) {
+    // 本次驱动已被作废（例如旁观中真人重开了新局）：停下，不再提交任何状态。
+    if (options.isCancelled?.()) {
+      halt = { reason: "idle", phase: state.snapshot.gamePhase };
+      break;
+    }
     const step = nextDriverStep(state, options.humanPlayerId);
     if (!step) {
       halt =
@@ -425,6 +439,12 @@ export async function runAiDriver(
               taskType: step.taskType,
             }
           : { reason: "idle", phase: state.snapshot.gamePhase };
+      break;
+    }
+
+    // AI 调用可能耗时较久；若期间被作废（真人重开），就此打住不再写入状态。
+    if (options.isCancelled?.()) {
+      halt = { reason: "idle", phase: state.snapshot.gamePhase };
       break;
     }
 

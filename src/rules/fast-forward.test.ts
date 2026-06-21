@@ -250,73 +250,26 @@ function reachHumanDeadSpectating(): EngineState {
   return state;
 }
 
-describe("P9-S11 fast forward, new game and review context", () => {
-  it("rejects fast forward while the human is still alive", () => {
-    const state = reachFirstVote();
-    const beforeSnapshot = structuredClone(state.snapshot);
-
-    expectErrorCode(
-      apply(state, {
-        type: "request_fast_forward",
-        idempotencyKey: "ff-alive-reject",
-        playerId: humanPlayerId,
-      }),
-      "ACTION_NOT_ALLOWED",
-    );
-    expect(state.snapshot).toEqual(beforeSnapshot);
-  });
-
-  it("flips a dead spectating human to fast_forwarded without assigning them a pending action", () => {
+describe("P9-S11 dead-spectator auto-advance, new game and review context", () => {
+  it("leaves a dead spectating human with no pending action at the next night", () => {
     const state = reachHumanDeadSpectating();
 
     expect(state.snapshot.gamePhase).toBe("night_action");
     expect(state.snapshot.round.night).toBe(2);
     expect(state.snapshot.humanParticipationState).toBe("dead_spectating");
+    // The dead human is never handed a pending action — the AI driver takes over.
     expect(state.snapshot.pendingAction).toBeNull();
     expect(
       state.snapshot.players.find((player) => player.isHuman)?.alive,
     ).toBe(false);
-
-    const fastForward = expectOk(
-      apply(state, {
-        type: "request_fast_forward",
-        idempotencyKey: "ff-request",
-        playerId: humanPlayerId,
-      }),
-    );
-
-    expect(fastForward.events.map((event) => event.type)).toEqual([
-      "fast_forward_requested",
-    ]);
-    expect(fastForward.snapshot.humanParticipationState).toBe("fast_forwarded");
-    // The dead human is never handed a pending action.
-    expect(fastForward.snapshot.pendingAction).toBeNull();
-
-    const requestEvent = fastForward.events[0];
-    expect(requestEvent.visibility).toEqual({
-      public: false,
-      visibleTo: [humanPlayerId],
-      revealInReview: true,
-    });
-
-    // A second request (new key) is rejected once already fast-forwarding.
-    const afterFastForward = appendState(state, fastForward);
-    expectErrorCode(
-      apply(afterFastForward, {
-        type: "request_fast_forward",
-        idempotencyKey: "ff-request-again",
-        playerId: humanPlayerId,
-      }),
-      "ACTION_NOT_ALLOWED",
-    );
   });
 
-  it("lets the day announcement advance while fast-forwarding even though the human is dead", () => {
+  it("auto-confirms the day announcement on behalf of a dead spectating human", () => {
     const announcement = reachDayAnnouncement();
-    // Simulate the human having died and chosen to fast-forward.
-    const fastForwardSnapshot: GameSnapshot = {
+    // Simulate the human having died and now spectating.
+    const deadSpectatingSnapshot: GameSnapshot = {
       ...announcement.snapshot,
-      humanParticipationState: "fast_forwarded",
+      humanParticipationState: "dead_spectating",
       pendingAction: null,
       players: announcement.snapshot.players.map((player) =>
         player.isHuman
@@ -329,15 +282,17 @@ describe("P9-S11 fast forward, new game and review context", () => {
           : player,
       ),
     };
-    const fastForwardState: EngineState = {
+    const deadSpectatingState: EngineState = {
       ...announcement,
-      snapshot: fastForwardSnapshot,
+      snapshot: deadSpectatingSnapshot,
     };
 
+    // The store's AI driver re-issues this confirmation; the rule must allow it
+    // so the day does not deadlock with no living confirmer.
     const confirmed = expectOk(
-      apply(fastForwardState, {
+      apply(deadSpectatingState, {
         type: "confirm_day_announcement",
-        idempotencyKey: "ff-confirm-during-ff",
+        idempotencyKey: "ff-confirm-spectating",
         playerId: humanPlayerId,
       }),
     );
@@ -350,38 +305,10 @@ describe("P9-S11 fast forward, new game and review context", () => {
     expect(confirmed.snapshot.pendingAction?.actorId).not.toBe(humanPlayerId);
   });
 
-  it("still rejects a dead_spectating (not fast-forwarded) human from confirming the day", () => {
-    const announcement = reachDayAnnouncement();
-    const deadSpectatingSnapshot: GameSnapshot = {
-      ...announcement.snapshot,
-      humanParticipationState: "dead_spectating",
-      players: announcement.snapshot.players.map((player) =>
-        player.isHuman ? { ...player, alive: false } : player,
-      ),
-    };
-
-    expectErrorCode(
-      applyAction(
-        {
-          type: "confirm_day_announcement",
-          idempotencyKey: "ff-dead-spectate-reject",
-          playerId: humanPlayerId,
-        },
-        {
-          events: announcement.events,
-          snapshot: deadSpectatingSnapshot,
-          session: announcement.session,
-          now,
-        },
-      ),
-      "ACTION_NOT_ALLOWED",
-    );
-  });
-
-  it("confirms a new game only from review and resets to an empty mode_select snapshot", () => {
+  it("confirms a new game from review and resets to an empty mode_select snapshot", () => {
     const review = reachReview();
 
-    // Not allowed mid-game.
+    // Not allowed mid-game while the human is still alive and playing.
     const midGame = reachFirstVote();
     expectErrorCode(
       apply(midGame, {
@@ -417,6 +344,25 @@ describe("P9-S11 fast forward, new game and review context", () => {
     expect(reset.snapshot.round).toEqual({ night: 0, day: 0, voteRound: "none" });
     expect(reset.visibleInformation.canAct).toBe(false);
     expect(reset.visibleInformation.legalActions).toEqual([]);
+  });
+
+  it("lets a dead spectating human restart immediately mid-game", () => {
+    // The human is dead and spectating at the start of night 2 (not at review).
+    const spectating = reachHumanDeadSpectating();
+    expect(spectating.snapshot.gamePhase).not.toBe("review");
+    expect(spectating.snapshot.humanParticipationState).toBe("dead_spectating");
+
+    const reset = expectOk(
+      apply(spectating, {
+        type: "confirm_new_game",
+        idempotencyKey: "ff-new-game-spectating",
+        playerId: humanPlayerId,
+      }),
+    );
+
+    expect(reset.snapshot.gamePhase).toBe("mode_select");
+    expect(reset.snapshot.players).toEqual([]);
+    expect(reset.snapshot.humanParticipationState).toBe("alive");
   });
 
   it("buildReviewContext assembles the full ground truth at review", () => {

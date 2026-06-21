@@ -74,10 +74,6 @@ export type GameAction = BaseGameAction &
         text: string;
       }
     | {
-        type: "request_fast_forward";
-        playerId: string;
-      }
-    | {
         type: "confirm_new_game";
         playerId: string;
       }

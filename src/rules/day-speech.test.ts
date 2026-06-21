@@ -638,7 +638,7 @@ describe("P9-S05 day announcement and ordered day speech rules", () => {
     expect(state.snapshot).toEqual(beforeSnapshot);
   });
 
-  it("RULE-007 STATE-001 rejects dead human day confirmation without changing facts or snapshot", () => {
+  it("RULE-007 STATE-001 auto-confirms the day for a dead spectating human (driver-driven)", () => {
     const state = createDayAnnouncementState();
     const deadHumanSnapshot: GameSnapshot = {
       ...state.snapshot,
@@ -654,25 +654,28 @@ describe("P9-S05 day announcement and ordered day speech rules", () => {
           : player,
       ),
     };
-    const beforeEvents = [...state.events];
-    const beforeSnapshot = structuredClone(deadHumanSnapshot);
-    const rejected = applyAction(
-      {
-        type: "confirm_day_announcement",
-        idempotencyKey: "dead-human-confirm-day",
-        playerId: humanPlayerId,
-      },
-      {
-        events: state.events,
-        snapshot: deadHumanSnapshot,
-        session: state.session,
-        now: "2026-06-19T09:00:05.000Z",
-      },
+    // Once the human is dead and spectating, the store's AI driver re-issues this
+    // confirmation on their behalf so the day cannot deadlock with no living
+    // confirmer. The rule must therefore accept it and advance to day_speech.
+    const confirmed = expectOk(
+      applyAction(
+        {
+          type: "confirm_day_announcement",
+          idempotencyKey: "dead-human-confirm-day",
+          playerId: humanPlayerId,
+        },
+        {
+          events: state.events,
+          snapshot: deadHumanSnapshot,
+          session: state.session,
+          now: "2026-06-19T09:00:05.000Z",
+        },
+      ),
     );
 
-    expectErrorCode(rejected, "ACTION_NOT_ALLOWED");
-    expect(state.events).toEqual(beforeEvents);
-    expect(deadHumanSnapshot).toEqual(beforeSnapshot);
+    expect(confirmed.snapshot.gamePhase).toBe("day_speech");
+    const speakerOrder = confirmed.snapshot.speechState?.speakerOrder ?? [];
+    expect(speakerOrder).not.toContain(humanPlayerId);
   });
 
   it("RULE-007 UI-003 rejects invalid speech text, non-turn speakers, dead speakers, and repeat submissions", () => {

@@ -154,10 +154,6 @@ export const gameActionSchema = z.discriminatedUnion("type", [
     text: nonEmptyString,
   }),
   baseActionSchema.extend({
-    type: z.literal("request_fast_forward"),
-    playerId: nonEmptyString,
-  }),
-  baseActionSchema.extend({
     type: z.literal("confirm_new_game"),
     playerId: nonEmptyString,
   }),

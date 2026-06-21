@@ -67,7 +67,7 @@ export type GameStoreState = {
    * UI 仍需据此渲染入口/设置屏；相位枚举本身不泄露任何隐藏身份。
    */
   phase: GamePhase | null;
-  /** 真人参与态（非机密）。UI 据此叠加只读/快进规则。 */
+  /** 真人参与态（非机密）。UI 据此叠加只读/旁观规则。 */
   participation: HumanParticipationState | null;
   /** 完整真相只在 review 阶段组装（ISO-002）；其余阶段恒为 null。 */
   reviewContext: ReviewContext | null;
@@ -106,6 +106,11 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
   const nowProvider = deps.now ?? (() => new Date().toISOString());
 
   return createStore<GameStoreState>()((set, get) => {
+    // 驱动代数：每次 dispatch 自增并「认领」为当前代。旁观中真人重开一局时，新的
+    // dispatch 会推进代数，令仍在 await LLM 的旧驱动作废——它不再提交，避免把已经
+    // 重置成开局态的 store 覆盖回旧对局。
+    let generation = 0;
+
     const humanVisibleInformation = (
       state: DriverState,
     ): VisibleInformationSnapshot | null => {
@@ -156,13 +161,23 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
       await persist(state);
     };
 
-    const drive = async (state: DriverState): Promise<DriverState> => {
+    const drive = async (
+      state: DriverState,
+      gen: number,
+    ): Promise<DriverState> => {
+      const isCurrent = () => gen === generation;
       return runAiDriver(state, {
         ai,
         humanPlayerId: state.session.humanPlayerId,
         now: nowProvider,
-        onStep: commit,
-        onHalt: (halt) => set({ diagnostics: halt }),
+        isCancelled: () => !isCurrent(),
+        // 已被新对局作废的旧驱动不得回写状态/诊断。
+        onStep: (s) => (isCurrent() ? commit(s) : undefined),
+        onHalt: (halt) => {
+          if (isCurrent()) {
+            set({ diagnostics: halt });
+          }
+        },
         onDegrade: ({ actorId, taskType, rejected }) => {
           // AI 出了非法动作、已用脚本安全动作顶上继续——不卡死，仅留痕便于排查。
           console.warn(
@@ -222,7 +237,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
           };
           await commit(state);
           // 可能在轮到 AI 时崩溃过——续跑到真人回合/终局。
-          state = await drive(state);
+          state = await drive(state, ++generation);
           await commit(state);
         }
 
@@ -230,6 +245,8 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
       },
 
       dispatch: async (action: GameAction) => {
+        // 认领本次 dispatch 为当前代；这会作废任何仍在跑的旧驱动（旁观中重开一局即靠此）。
+        const gen = ++generation;
         set({ busy: true, lastError: null });
         const { session, snapshot, events } = get();
         const now = nowProvider();
@@ -250,7 +267,8 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
 
         const success = result.data;
 
-        // 开新局：清存档、重置事件流，回到空白选择态。
+        // 开新局：清存档、重置事件流，回到空白选择态。可由复盘发起，也可由真人出局
+        // 旁观途中直接重开（gen 自增已令仍在跑的旁观驱动作废，不会回写旧对局）。
         if (action.type === "confirm_new_game") {
           await clearCurrentGame(db);
           set({
@@ -265,6 +283,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
             phase: success.snapshot.gamePhase,
             participation: success.snapshot.humanParticipationState,
             reviewContext: null,
+            diagnostics: null,
           });
           return;
         }
@@ -279,9 +298,12 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         };
 
         await commit(state);
-        state = await drive(state);
-        await commit(state);
-        set({ busy: false, thinking: null });
+        state = await drive(state, gen);
+        // 若本次驱动期间真人重开了一局（gen 已过期），最终状态已由新 dispatch 接管，
+        // 这里不要再回写 busy/最终态，避免覆盖开局界面。每步的 commit 已由 drive 负责。
+        if (gen === generation) {
+          set({ busy: false, thinking: null });
+        }
       },
 
       askReview: async (question: string): Promise<Result<string>> => {

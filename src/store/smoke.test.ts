@@ -38,11 +38,11 @@ function freshStore(): { store: GameStore; db: GameDatabase } {
  * 所以这里只需在每次"控制权回到真人"时给出真人该相位的合理动作：
  * - 能行动（vi.canAct）→ 按 legalActions 选第一个合法目标 / 文本。
  * - 确认门（揭示 / 天亮）→ 按相位确认。
- * - 真人已死在旁观 → 快进到结局。
+ * - 真人已死在旁观 → 无需真人动作，driver 自动推进到结局。
  * 返回 null 表示无可推进动作（应停下，避免死循环）。
  */
 function nextHumanAction(store: GameStore): GameAction | null {
-  const { phase, participation, visibleInformation: vi } = store.getState();
+  const { phase, visibleInformation: vi } = store.getState();
 
   if (phase === "role_reveal") {
     return {
@@ -140,15 +140,8 @@ function nextHumanAction(store: GameStore): GameAction | null {
     }
   }
 
-  // 真人已出局且不能行动：快进到结局（driver 代为推进天亮 + AI 行动直到 review）。
-  if (participation === "dead_spectating") {
-    return {
-      type: "request_fast_forward",
-      idempotencyKey: nextKey("ff"),
-      playerId: HUMAN,
-    };
-  }
-
+  // 真人已出局：无需任何真人动作——driver 会在导致出局的那次 dispatch 内自动把对局
+  // 一路推进到 review（旁观）。这里返回 null，由 playToReview 直接读到 review 相位。
   return null;
 }
 

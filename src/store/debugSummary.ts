@@ -40,7 +40,6 @@ const TASK_LABEL: Record<InGameTaskType, string> = {
 const PARTICIPATION_LABEL: Record<string, string> = {
   alive: "存活",
   dead_spectating: "已出局（旁观）",
-  fast_forwarded: "已出局（快进中）",
 };
 
 type PlayerMeta = {

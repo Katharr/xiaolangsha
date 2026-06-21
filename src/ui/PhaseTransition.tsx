@@ -20,7 +20,7 @@ function segmentOf(
   if (!phase || !round) {
     return null;
   }
-  if (phase === "review" || phase === "fast_forwarding") {
+  if (phase === "review") {
     return null;
   }
   // 开局前的几个相位归为「准备段」：让首夜进场也能播过场，但刷新直接落在夜里时不闪。
@@ -47,6 +47,10 @@ const LID_EASE = [0.7, 0, 0.3, 1] as const;
 export function PhaseTransition({ phase, round }: PhaseTransitionProps) {
   const [overlay, setOverlay] = useState<{ label: string } | null>(null);
   const prevKey = useRef<string | null>(null);
+  // 过场定时器存 ref，由「开始新过场」时主动清旧排新。
+  // 不能绑进 effect cleanup：依赖里有 phase，同一天段内相位还会变（day_announcement→day_speech…），
+  // 旁观自动推进时这些变化会在过场结束前触发 cleanup 清掉定时器 → 遮罩常驻黑屏、is-day 不切换。
+  const timers = useRef<number[]>([]);
 
   useEffect(() => {
     const seg = segmentOf(phase, round);
@@ -65,17 +69,23 @@ export function PhaseTransition({ phase, round }: PhaseTransitionProps) {
       return;
     }
 
+    // 真正开始一场新过场：清掉上一场可能残留的定时器，再排新的。
+    timers.current.forEach(window.clearTimeout);
+    timers.current = [];
+
     setOverlay({ label: seg.label });
     // 遮罩闭合到底（~560ms）的瞬间切换昼夜主题，再于全程结束后收起遮罩。
-    const toTheme = window.setTimeout(() => {
-      document.body.classList.toggle("is-day", !seg.isNight);
-    }, 560);
-    const toClose = window.setTimeout(() => setOverlay(null), 1150);
-    return () => {
-      window.clearTimeout(toTheme);
-      window.clearTimeout(toClose);
-    };
+    timers.current.push(
+      window.setTimeout(() => {
+        document.body.classList.toggle("is-day", !seg.isNight);
+      }, 560),
+    );
+    timers.current.push(window.setTimeout(() => setOverlay(null), 1150));
   }, [phase, round?.night, round?.day]);
+
+  // 仅在卸载时清理残留定时器（同一天段内的相位变化不应清它们）。
+  // teardown 时直接读 timers.current：数组引用会被「开始新过场」重置，不能提前捕获。
+  useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
 
   return (
     <AnimatePresence>
