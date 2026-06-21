@@ -76,7 +76,10 @@ export async function handleAiRespond(
   }
 
   const prompt = buildPrompt(parsed.data);
-  return callLLM(prompt, config, fetchImpl);
+  // 复盘问答用更强的 reviewModel，局内发言/行动用更快更省的 model；url/key 共用。
+  const model =
+    parsed.data.taskType === "review_question" ? config.reviewModel : config.model;
+  return callLLM(prompt, config, fetchImpl, model);
 }
 
 /**
@@ -320,6 +323,7 @@ async function callLLM(
   prompt: PromptMessages,
   config: ProxyConfig,
   fetchImpl: FetchImpl,
+  model: string,
 ): Promise<Result<AiTaskPayload>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -327,8 +331,8 @@ async function callLLM(
   try {
     const request =
       config.wireApi === "responses"
-        ? buildResponsesRequest(prompt, config)
-        : buildChatRequest(prompt, config);
+        ? buildResponsesRequest(prompt, config, model)
+        : buildChatRequest(prompt, config, model);
 
     const response = await fetchImpl(request.url, {
       method: "POST",
@@ -384,11 +388,11 @@ async function callLLM(
   }
 }
 
-function buildChatRequest(prompt: PromptMessages, config: ProxyConfig) {
+function buildChatRequest(prompt: PromptMessages, config: ProxyConfig, model: string) {
   return {
     url: `${config.baseUrl}/chat/completions`,
     body: {
-      model: config.model,
+      model,
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },
@@ -398,11 +402,11 @@ function buildChatRequest(prompt: PromptMessages, config: ProxyConfig) {
   };
 }
 
-function buildResponsesRequest(prompt: PromptMessages, config: ProxyConfig) {
+function buildResponsesRequest(prompt: PromptMessages, config: ProxyConfig, model: string) {
   return {
     url: `${config.baseUrl}/responses`,
     body: {
-      model: config.model,
+      model,
       input: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },

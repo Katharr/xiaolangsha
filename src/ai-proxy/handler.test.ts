@@ -42,7 +42,8 @@ function fakeVi(
 const configured: ProxyConfig = {
   baseUrl: "https://llm.example/v1",
   apiKey: "secret-key-123",
-  model: "gpt-5.5",
+  model: "gpt-5.4-mini",
+  reviewModel: "gpt-5.5",
   wireApi: "chat",
   timeoutMs: 30_000,
   configured: true,
@@ -206,6 +207,30 @@ describe("handleAiRespond", () => {
     expect(result.ok).toBe(true);
     const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://llm.example/v1/responses");
+  });
+
+  it("uses config.model for in-game tasks and config.reviewModel for review", async () => {
+    const fetchImpl = vi.fn(async () =>
+      chatResponse(JSON.stringify({ text: "ok" })),
+    );
+
+    await handleAiRespond(voteRequest(), configured, fetchImpl as unknown as typeof fetch);
+    await handleAiRespond(
+      {
+        gameId: "g-1",
+        taskType: "review_question",
+        questionText: "你晚上为什么刀我？",
+        reviewContext: { foo: "bar" },
+      },
+      configured,
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    const bodyOf = (call: number) =>
+      JSON.parse((fetchImpl.mock.calls[call] as unknown as [string, RequestInit])[1].body as string);
+    // 局内发言/投票走 mini；复盘问答走更强的 reviewModel。url/key 共用同一端点。
+    expect(bodyOf(0).model).toBe("gpt-5.4-mini");
+    expect(bodyOf(1).model).toBe("gpt-5.5");
   });
 });
 
