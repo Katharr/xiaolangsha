@@ -6,14 +6,16 @@ import { character } from "./character";
 import { fakeVi } from "./testFixtures";
 
 describe("L0 人物卡 character()", () => {
-  it("含职业与打法心智字段（先做人）", () => {
-    const text = character(fakeVi({ ownName: "老张" }));
+  it("含职业字段 + 两行原前缀 + 自我指涉锚（先做人）", () => {
+    const text = character(fakeVi({ ownName: "老张", ownSeat: 6 }));
     const card = characterForName("老张");
     expect(text).toContain(card.profession);
-    expect(text).toContain(card.playMind);
     // 保留两行原前缀（与 handler.test 的断言一致）。
     expect(text).toContain("你的性格：");
     expect(text).toContain("你判断局面的倾向：");
+    // 钉「你就是 N 号本人」修自我指涉 bug。
+    expect(text).toContain("6号");
+    expect(text).toContain("本人");
   });
 
   it("异名人物卡不同、同名稳定", () => {

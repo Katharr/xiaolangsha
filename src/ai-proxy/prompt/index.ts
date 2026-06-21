@@ -14,7 +14,7 @@ import type { z } from "zod";
 import type { aiTaskRequestSchema } from "../../shared";
 
 import { character } from "./character";
-import { OUTPUT_CONTRACT } from "./output";
+import { output, reviewOutputContract } from "./output";
 import { factionPlaybook } from "./playbook";
 import { reasoning } from "./reasoning";
 import { task, type InGameTaskType } from "./task";
@@ -38,8 +38,7 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
         "你是一名 AI 狼人杀玩家，本局已经结束，正在复盘环节回答真人玩家的提问。",
         "下面提供本局的完整复盘上下文（reviewContext，含所有身份、夜晚行动、发言与投票）。",
         "请基于该上下文如实、简洁地用中文回答问题。",
-        OUTPUT_CONTRACT,
-        "复盘回答只需填写 text 字段。",
+        reviewOutputContract,
       ].join("\n"),
       user: [
         `问题：${req.questionText}`,
@@ -51,6 +50,7 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
 
   const vi = req.visibleInformation;
   const draft = req.promptContext?.currentText;
+  const taskType = req.taskType as InGameTaskType;
 
   return {
     system: [
@@ -59,8 +59,8 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
       worldModel(), // L2
       factionPlaybook(vi), // L3
       reasoning(), // L4
-      task(req.taskType as InGameTaskType, vi), // L5
-      OUTPUT_CONTRACT, // L6
+      task(taskType, vi), // L5
+      output(taskType), // L6
     ]
       .filter((line) => line.length > 0)
       .join("\n"),

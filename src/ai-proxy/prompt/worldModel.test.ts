@@ -23,8 +23,8 @@ describe("L2 世界模型 worldModel()", () => {
     expect(text).toContain("话少");
   });
 
-  it("含无警长禁令（逐字保留）", () => {
-    expect(worldModel()).toContain("没有「警长 / 警徽」这一设定");
+  it("含无警长禁令", () => {
+    expect(worldModel()).toContain("没有警长 / 警徽");
   });
 
   it("不出现身份断言子串", () => {
@@ -32,7 +32,7 @@ describe("L2 世界模型 worldModel()", () => {
   });
 
   it("对所有 role / faction 都装配进 system（全员同一份）", () => {
-    const marker = "在动手之前，先把这局狼人杀的底层逻辑想明白";
+    const marker = "几条对每个人都成立的底线认知";
     const roles: Array<{ role: Role; faction: "good_team" | "werewolf_team" }> = [
       { role: "werewolf", faction: "werewolf_team" },
       { role: "seer", faction: "good_team" },

@@ -1,8 +1,6 @@
 /**
- * L5 任务：当前 taskType 的动作纪律 + 合法目标（去偏见洗牌）。task-first 严格约束。
- *
- * 瘦身原则：关于「怎么判读跳身份/查杀/对跳」的认知已上移到 L2（worldModel）/L3（playbook），
- * 这里只留「现在这一步具体要产出什么动作」的纪律 + targetsHint，不再重复判读说明。
+ * L5 任务（瘦身版）：每个 taskType 只留「这一步具体做什么」的动作纪律 + 合法目标洗牌。
+ * 判读知识在 L2/L3，这里不重复；发言纪律（短、口语、别复述）放最后、离输出最近、权重最高。
  */
 import type { VisibleInformationSnapshot } from "../../shared";
 
@@ -16,9 +14,8 @@ export type InGameTaskType =
   | "last_words";
 
 /**
- * 候选目标去偏见洗牌：对一份副本做确定性 Fisher-Yates（种子=gameId+generatedAtSeq+ownSeat），
- * 避免模型按列表首尾位置锚定选人。**绝不改动 vi 本身**（user 段仍精确等于 vi 序列化，守 ISO 测试）。
- * 同一 vi 必得同一顺序（可复现）；不同座位通常得到不同顺序（去位置偏见）。
+ * 候选目标去偏见洗牌：对副本做确定性 Fisher-Yates（种子=gameId+generatedAtSeq+ownSeat），
+ * 避免模型按列表首尾锚定。**绝不改 vi 本身**（user 段仍精确等于 vi 序列化，守 ISO 测试）。
  */
 export function shuffledTargets(
   targets: string[],
@@ -54,17 +51,17 @@ export function task(taskType: InGameTaskType, vi: VisibleInformationSnapshot): 
   const orderedTargets = legalTargets.length > 0 ? shuffledTargets(legalTargets, vi) : [];
   const targetsHint =
     orderedTargets.length > 0
-      ? `合法目标 id：${orderedTargets.join("、")}。（候选顺序是随机排的，不代表任何倾向，别按排序先后选人。）`
+      ? `合法目标 id：${orderedTargets.join("、")}。（顺序随机排的，不代表任何倾向，别按排序先后选人。）`
       : "当前没有可选目标。";
 
   switch (taskType) {
     case "night_action": {
       const wolfTeamNote =
         vi.ownRole === "werewolf" && vi.teammates.length > 0
-          ? "今晚的刀由狼队共同投票决定：你和队友各报一个目标，多数票者被刀，平票时由真人狼拍板。和队友尽量刀同一个人，别把刀票浪费在自己队友身上。"
+          ? "狼刀由狼队投票决定，尽量和队友刀同一个人，别把刀票浪费在队友身上。"
           : "";
       return [
-        "任务：夜晚行动。先把局面想清楚再选。请根据你的身份选择 actionType（狼人=werewolf_kill，预言家=seer_check，守卫=guard_protect）并指定 targetId。",
+        "夜晚行动：按你的身份选 actionType（狼=werewolf_kill，预言家=seer_check，守卫=guard_protect）并给 targetId。",
         wolfTeamNote,
         targetsHint,
       ]
@@ -73,34 +70,24 @@ export function task(taskType: InGameTaskType, vi: VisibleInformationSnapshot): 
     }
     case "witch_action":
       return [
-        "任务：女巫行动。你已得知今晚被刀的人（见可见信息里仅你可见的私有事件）。先想清楚再决定 witchChoice：save 救他、poison 并给出 targetId 毒一人、或 skip 放弃。解药和毒药各只有一次。",
-        "用毒的纪律：毒药是你最稀缺、最容易帮倒忙的资源。决定用毒前，先确认你能在 decisionSummary 里点名「我要毒谁、依据是这局里的哪条具体证据」——某人的发言破绽、票型、预言家对跳、或公开的查杀。",
-        "只要有指向某个具体人的依据就可以毒，哪怕这个判断是别人带起来的节奏、哪怕你可能被骗了、哪怕最后毒错——那都算正常发挥，不用怕。",
-        "但如果你说不出针对某个具体人的理由，只是「想找狼试试」「施压」「随便毒一个赌一把」，那就 skip，把毒药留到有据的那一晚。空过一晚不用毒完全没问题，别因为「预言家死了我得做点什么」就盲毒。",
-        "反过来，如果场上已经有人被对跳或公开查杀坐实成狼，那他就是你优先该毒的对象，该出手就果断出手——纪律不是叫你永远不用毒。",
+        "女巫行动：你已得知今晚被刀的人。决定 witchChoice——save 救他 / poison 配 targetId 毒一人 / skip 放弃；解药、毒药各只一次。",
+        "用毒要有指向某个具体人的依据（发言破绽、票型、对跳、公开查杀）；说不出具体理由就 skip 把毒留着，别盲毒、也别因为「得做点什么」乱毒；已被坐实的狼就果断毒。",
         targetsHint,
       ].join("\n");
     case "hunter_shoot":
-      return `任务：你是猎人且已出局，可开枪带走一名存活玩家。先想清楚带走谁最有利再开枪。给出 targetId 开枪，或留空放弃开枪。${targetsHint}`;
+      return `你是猎人且已出局，可开枪带走一名存活玩家：想清楚带走谁最有利，给 targetId 开枪，或留空放弃。${targetsHint}`;
     case "vote":
       return [
-        "任务：投票放逐。先在 analysisSummary 里想清楚再投。",
-        "本局投票是所有人同时暗投、结算时一起翻牌——你现在看不到别人投了谁，所以根本无从跟票，只管按你自己的判断投出最该走的那个人。",
-        "把票投在对你阵营最有利的人身上：好人要找狼、狼要带节奏，但都得基于这局讨论里的逻辑，而不是挑场上最软的柿子。",
-        "你和别人结论不同很正常，按你自己的判断倾向投，不用凑大流、也别为了和别人不一样而乱投——投你真心认为最该走的那个人。",
-        `然后 choiceType="target" 配 targetId 投出一票，或在允许时 choiceType="abstain" 弃票。不能投自己。${targetsHint}`,
+        "投票放逐：暗投，你看不到别人投了谁，就按自己的判断投最该走的那个、别挑场上最软的柿子。",
+        `choiceType="target" 配 targetId 投一票，或允许时 choiceType="abstain" 弃票；不能投自己。${targetsHint}`,
       ].join("\n");
     case "speech":
-      return [
-        "任务：白天发言。用你自己的性格、像真人那样自然地说几句（仅填 text，别太长，大白话即可）。先在心里把判断想好，说出来的话要和你心里的判断一致；该带的节奏、该表的态照样表，只是用平时聊天的口气说出来。",
-        "给出你自己的独立观点，别附和或复述前面人已经说过的话——如果你的判断和前面发言的人不同，就直接说出来，把分歧讲清楚比随大流更有用。",
-        "选怀疑对象时只看各人发言/行为的逻辑，别按发言顺序或座位顺序锚定谁（比如别习惯性盯着前几个发言的人或某个固定座位），按你自己的判断倾向去找最该怀疑的人。",
-      ].join("\n");
+      return "轮到你发言（只填 text）：用你自己的口气说一两句大白话，给出你自己的独立判断（信谁/疑谁）；别附和或复述前面人已经说过的话，选怀疑对象只看发言逻辑、别按发言顺序或座位顺序锚定人；像真人那样自然，别长篇、别念分析报告。";
     case "tie_speech":
-      return "任务：平票了，再争取一下选票。用聊天的口气简短重申你的立场（要和你之前的判断一致），别念稿（仅填 text，越短越自然）。";
+      return "平票了，再争取一下选票：用聊天口气简短重申你的立场（和之前判断一致），别念稿（只填 text，越短越好）。";
     case "last_words":
-      return "任务：你被放逐了，留几句遗言。像真人那样自然交代你的判断或心里话即可，不用长篇大论（仅填 text）。";
+      return "你被放逐了，留几句遗言：像真人那样自然说几句心里话即可，别长篇（只填 text）。";
     default:
-      return "任务：请根据可见信息给出合理输出。";
+      return "请根据可见信息给出合理输出。";
   }
 }

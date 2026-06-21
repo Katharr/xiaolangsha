@@ -15,10 +15,18 @@ function speechReq(vi = fakeVi()) {
 
 describe("L3 阵营打法 playbook()", () => {
   it("好人段：采信无对跳单跳查杀 + 保护真预言家（锁首夜冤神 bug）", () => {
-    const text = goodPlaybook();
+    const text = goodPlaybook(fakeVi({ ownRole: "villager", ownFaction: "good_team" }));
     expect(text).toContain("保护真预言家");
     expect(text).toContain("采信");
     expect(text).toContain("替狼杀");
+  });
+
+  it("预言家补「跳报金水/查杀、别潜水」的产信息纪律（修神职潜水）", () => {
+    const text = goodPlaybook(fakeVi({ ownRole: "seer", ownFaction: "good_team" }));
+    expect(text).toContain("别只顾自保潜水");
+    // 村民不带这句神职纪律。
+    const villager = goodPlaybook(fakeVi({ ownRole: "villager", ownFaction: "good_team" }));
+    expect(villager).not.toContain("潜水");
   });
 
   it("狼人段：护队友 + 悍跳，并带出队友名单", () => {

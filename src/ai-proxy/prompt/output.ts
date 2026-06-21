@@ -1,15 +1,41 @@
 /**
- * L6 输出契约。JSON 字段约定——严格（动作/JSON 正确性不靠人设松绑）。
- * review 分支也复用本段。
+ * L6 输出契约（瘦身版）。按 taskType 只列**当前这步用得到的字段**，不再每条都把全部字段
+ * 铺一遍——既省体积，也少给弱模型干扰项。analysisSummary/decisionSummary 始终保留（私有推理）。
  */
-export const OUTPUT_CONTRACT = [
-  "你必须只输出一个 JSON 对象，不要包含任何额外文字或 Markdown 代码块。",
-  "JSON 字段（按需填写）：",
-  "- text: string —— 你的发言/遗言/拉票文本（发言类任务必填）。",
-  '- choiceType: "target" | "abstain" —— 投票任务用，target 表示投某人，abstain 表示弃票。',
-  "- targetId: string —— 行动/投票的目标玩家 id，必须取自可见信息给出的合法目标。",
-  '- actionType: "werewolf_kill" | "seer_check" | "guard_protect" —— 狼刀/预言家查验/守卫守护任务用。',
-  '- witchChoice: "save" | "poison" | "skip" —— 女巫任务用：救被刀者 / 用毒药（配 targetId）/ 放弃。',
-  "- analysisSummary: string —— （可选）你的私下分析，不会展示给其他玩家。",
-  "- decisionSummary: string —— （可选）你做出该决策的简要理由，不会展示给其他玩家。",
-].join("\n");
+import type { InGameTaskType } from "./task";
+
+const FIELD_LINES: Record<InGameTaskType, string[]> = {
+  speech: ["- text: 你的发言。"],
+  tie_speech: ["- text: 你的拉票发言。"],
+  last_words: ["- text: 你的遗言。"],
+  vote: [
+    '- choiceType: "target"(投人) 或 "abstain"(弃票)。',
+    "- targetId: 投票目标 id（投人时必填，取自合法目标）。",
+  ],
+  night_action: [
+    '- actionType: "werewolf_kill" | "seer_check" | "guard_protect"。',
+    "- targetId: 行动目标 id（取自合法目标）。",
+  ],
+  witch_action: [
+    '- witchChoice: "save" | "poison" | "skip"。',
+    "- targetId: 用毒时填要毒的人 id。",
+  ],
+  hunter_shoot: ["- targetId: 开枪目标 id；放弃则留空。"],
+};
+
+const TAIL = [
+  "- analysisSummary: （可选）你的私下分析，不展示给别人。",
+  "- decisionSummary: （可选）你这么选的简要理由，不展示给别人。",
+];
+
+export function output(taskType: InGameTaskType): string {
+  return [
+    "只输出一个 JSON 对象（不要任何额外文字或 Markdown 代码块），按需填这些字段：",
+    ...(FIELD_LINES[taskType] ?? []),
+    ...TAIL,
+  ].join("\n");
+}
+
+/** 复盘问答用的极简契约（只需 text）。 */
+export const reviewOutputContract =
+  "只输出一个 JSON 对象（不要额外文字或代码块），把回答填进 text 字段即可。";

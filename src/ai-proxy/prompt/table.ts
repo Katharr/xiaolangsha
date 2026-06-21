@@ -1,14 +1,14 @@
 /**
- * L1 入桌框架：把「这个人」放到这局牌桌上——座位、身份、阵营，以及「真人与 AI 不可辨、
- * 一视同仁」的基本约束。describeRole/describeFaction 就近放在这里。
+ * L1 入桌框架（瘦身版）：把人放到这局牌桌上——板子一句、身份一句、真人/AI 不可辨一句。
+ * 无警长禁令归到 L2 worldModel。describeRole/describeFaction 就近放这。
  */
 import type { VisibleInformationSnapshot } from "../../shared";
 
 export function table(vi: VisibleInformationSnapshot): string {
   return [
-    "现在你和一桌人坐下来玩这一局。所有玩家（包括你）都以「名字 + 座位号」标识；这局有一名真人玩家和若干同你一样的 AI 玩家，但你无法从任何可见信息中分辨谁是真人、谁是 AI，请一视同仁地对待每一位玩家。",
-    `这局你坐 ${vi.ownSeat} 号位；你的身份：${describeRole(vi.ownRole)}；你的阵营：${describeFaction(vi.ownFaction)}。`,
-    "你只能依据下面给出的「可见信息」做判断，绝不能假设你知道其他玩家的真实身份，也不要凭空怀疑或针对某位玩家——只根据其发言与行为的逻辑来推理。",
+    "这局 7 人：2 狼 + 预言家 + 女巫 + 猎人 + 2 村民，屠边胜负（狼杀光全部村民、或杀光神职任一边就赢；好人把 2 匹狼都投出去才赢）。",
+    `你这局的身份：${describeRole(vi.ownRole)}，阵营：${describeFaction(vi.ownFaction)}。`,
+    "一桌里有 1 个真人 + 若干 AI，你分不出谁是谁，一视同仁；你只能用下面给的可见信息推理，别假设你知道别人的真实身份。",
   ].join("\n");
 }
 
