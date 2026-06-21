@@ -11,7 +11,7 @@ import type {
   Role,
   VoteChoiceType,
 } from "../shared";
-import { err } from "../shared";
+import { err, ok } from "../shared";
 
 import {
   isAbnormalHalt,
@@ -243,6 +243,40 @@ describe("runAiDriver", () => {
     // 主 AI 全挂，仍靠脚本兜底跑完夜晚到达天亮播报。
     expect(driven.snapshot.gamePhase).toBe("day_announcement");
     expect(driven.snapshot.nightState?.resolved).toBe(true);
+  });
+
+  it("degrades to a safe scripted action when the AI returns an illegal action (不卡死)", async () => {
+    const scripted = new ScriptedAiClient();
+    // 第一个夜晚行动（狼刀）返回一个不存在的目标——语法合法、规则非法；其余照常走脚本。
+    let firstNightActionSeen = false;
+    const rogue: AiClient = {
+      async respond(req) {
+        if (req.taskType === "night_action" && !firstNightActionSeen) {
+          firstNightActionSeen = true;
+          return ok({ actionType: "werewolf_kill", targetId: "ghost-nonexistent" });
+        }
+        return scripted.respond(req);
+      },
+    };
+    const degrades: Array<{ actorId: string; taskType: string }> = [];
+    const halts: DriverHalt[] = [];
+
+    const driven = await runAiDriver(reachNight(), {
+      ai: rogue,
+      humanPlayerId,
+      now,
+      onDegrade: ({ actorId, taskType }) => degrades.push({ actorId, taskType }),
+      onHalt: (h) => halts.push(h),
+    });
+
+    // 非法狼刀被规则拒绝 → 脚本安全动作顶上 → 夜晚照常结算到天亮播报，不卡死。
+    expect(driven.snapshot.gamePhase).toBe("day_announcement");
+    expect(driven.snapshot.nightState?.resolved).toBe(true);
+    expect(degrades).toHaveLength(1);
+    expect(degrades[0]?.taskType).toBe("night_action");
+    // 不是异常停止。
+    expect(halts.at(-1)?.reason).toBe("idle");
+    expect(isAbnormalHalt(halts.at(-1) ?? null)).toBe(false);
   });
 
   it("onHalt reports idle when stopping for the alive human (正常等真人，非异常)", async () => {

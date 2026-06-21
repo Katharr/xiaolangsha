@@ -163,6 +163,12 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         now: nowProvider,
         onStep: commit,
         onHalt: (halt) => set({ diagnostics: halt }),
+        onDegrade: ({ actorId, taskType, rejected }) => {
+          // AI 出了非法动作、已用脚本安全动作顶上继续——不卡死，仅留痕便于排查。
+          console.warn(
+            `[driver] AI 动作被规则拒绝，已降级为脚本安全动作：actor=${actorId} task=${taskType} 原因=${rejected.code}:${rejected.message}`,
+          );
+        },
         onActorThinking: ({ actorId, taskType }) => {
           const snapshot = get().snapshot;
           const player = snapshot?.players.find(

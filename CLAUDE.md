@@ -64,6 +64,12 @@
 - **中文 label 单一来源**：领域枚举→中文映射（ROLE/PHASE/FACTION/WIN_REASON/NIGHT_STEP/DEATH_CAUSE/NIGHT_ACTION_VERB）已从 `src/ui/labels.ts` 迁到 `src/shared/labels.ts`（ui 与 store 共用，避免 store→ui 依赖环）；`ui/labels.ts` 改为再导出 + 保留 ui 专属 `TASK_THINKING_LABEL`。
 - 基线：`tsc -b` 绿、`npm test` **138 绿**、`npm run build` 绿。
 
+### 驱动降级安全网（2026-06-21）
+
+- **修复「AI 出非法动作→整局卡死」**：真 LLM 可能返回「语法合法但规则非法」的动作（实测：女巫在平安夜无刀口时仍选 `witchChoice:"save"` → 规则引擎拒 `Witch cannot use the antidote now.`，第 2 夜女巫步卡死）。旧 `runAiDriver` 一遇 `applyAction` 拒绝就 `rule_rejected` 停死；`withFallback` 只兜底「AI 调用报错」，管不到「返回了非法动作」。
+- **落地**：`src/store/driver.ts` 新增降级安全网——AI 步被规则拒绝时，用模块级 `SAFE_FALLBACK_AI = new ScriptedAiClient()`（输出恒为合法动作、ISO-001 安全）对同一步重新决策再 `applyAction` 一次；只有**连脚本安全动作都被拒**才算真异常、才 `rule_rejected` 停。脚本女巫无刀口时返回 `skip`（永远合法），正好化解这一类。新增可选回调 `onDegrade`，`gameStore` 接到后 `console.warn` 留痕（不卡死、仅记录 LLM 出非法动作）。回归测试 `driver.test.ts`「degrades to a safe scripted action…」。
+- 基线：`tsc -b` 绿、`npm test` **145 绿**、`npm run build` 绿。
+
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 
 - **M0** 工程准备：✅ **已完成**——分支 `build/mvp-playable` 已建；`zustand@5`/`dexie@4`/`fake-indexeddb@6` 已装；基线 `npm test` 32 绿。下一步直接进 M1。

@@ -1,3 +1,4 @@
+import { ScriptedAiClient } from "../ai-client";
 import type { AiClient, AiTaskPayload, AiTaskRequest } from "../ai-client";
 import { applyAction, buildVisibleInformation } from "../rules";
 import type {
@@ -12,6 +13,13 @@ import type {
 
 const MAX_SPEECH_LENGTH = 500;
 const DEFAULT_MAX_STEPS = 300;
+
+/**
+ * 降级安全网用的确定性脚本兜底 AI（无状态、可全局共享）。
+ * 当真 LLM 返回「语法合法但规则非法」的动作（如女巫在无刀口时选 save）被规则引擎
+ * 拒绝时，driver 用它对同一步重新决策——脚本输出恒为合法动作，避免整局卡死。
+ */
+const SAFE_FALLBACK_AI = new ScriptedAiClient();
 
 /** 局中（非复盘）AI 任务类型——driver 只产出这些。 */
 export type InGameTaskType =
@@ -327,6 +335,15 @@ export type DriverOptions = {
   }) => void;
   /** 循环结束时回报停下的原因（诊断用：正常等真人 / 还是异常卡住）。 */
   onHalt?: (halt: DriverHalt) => void;
+  /**
+   * AI 返回的动作被规则拒绝、改用脚本安全动作顶上时触发（诊断用）。
+   * 触发不代表卡死——流程已用合法动作继续；只是记录「这一步 LLM 出了非法动作」。
+   */
+  onDegrade?: (info: {
+    actorId: string;
+    taskType: InGameTaskType;
+    rejected: AppError;
+  }) => void;
   /** 防御性步数上限，避免规则/AI 异常造成死循环。 */
   maxSteps?: number;
 };
@@ -411,13 +428,39 @@ export async function runAiDriver(
       break;
     }
 
-    const result = applyAction(action, {
+    let result = applyAction(action, {
       session: state.session,
       snapshot: state.snapshot,
       events: state.events,
       now,
     });
+
+    // 降级安全网（设计要求：AI 返回的语法合法但规则非法的动作不应卡死整局）。
+    // 仅对 AI 步生效：用脚本兜底 AI 对同一步重新决策（输出恒为合法动作）再试一次。
+    if (!result.ok && step.kind === "ai") {
+      options.onDegrade?.({
+        actorId: step.actorId,
+        taskType: step.taskType,
+        rejected: result.error,
+      });
+      const safeAction = await degradeToSafeAction(
+        step,
+        state,
+        `${state.snapshot.gameId}-drv-${step.actorId}-${step.taskType}-${seq}-fallback`,
+      );
+      if (safeAction) {
+        action = safeAction;
+        result = applyAction(safeAction, {
+          session: state.session,
+          snapshot: state.snapshot,
+          events: state.events,
+          now,
+        });
+      }
+    }
+
     if (!result.ok) {
+      // 连脚本安全动作都被拒——这才是真异常，停下并提示导出日志。
       halt = { reason: "rule_rejected", action, error: result.error };
       break;
     }
@@ -433,6 +476,33 @@ export async function runAiDriver(
 
   options.onHalt?.(halt);
   return state;
+}
+
+/**
+ * 用确定性脚本兜底 AI 为同一步重新决策出一个合法动作；脚本调用失败或无法构造动作时返回 null。
+ * 只读 visibleInformation（ISO-001），与正常 AI 步走完全相同的请求/转换路径。
+ */
+async function degradeToSafeAction(
+  step: Extract<DriverStep, { kind: "ai" }>,
+  state: DriverState,
+  idempotencyKey: string,
+): Promise<GameAction | null> {
+  const visibleInformation = buildVisibleInformation(
+    step.actorId,
+    state.snapshot,
+    state.events,
+  );
+  const request = buildRequest(step, visibleInformation, state.snapshot.gameId);
+  const response = await SAFE_FALLBACK_AI.respond(request);
+  if (!response.ok) {
+    return null;
+  }
+  return payloadToAction({
+    step,
+    payload: response.data,
+    snapshot: state.snapshot,
+    idempotencyKey,
+  });
 }
 
 function clampText(text: string | undefined, fallback: string): string {
