@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { VisibleInformationSnapshot } from "../shared";
 
 import type { ProxyConfig } from "./config";
-import { buildPrompt, handleAiRespond } from "./handler";
+import { handleAiRespond } from "./handler";
+import { buildPrompt } from "./prompt";
 
 function fakeVi(
   overrides: Partial<VisibleInformationSnapshot> = {},

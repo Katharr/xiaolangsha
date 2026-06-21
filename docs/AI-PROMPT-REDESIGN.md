@@ -2,7 +2,7 @@
 
 > 本文是**会话交接文档**,可独立执行,无需上一轮对话上下文。配套调研沉淀见 `docs/AI-PROMPT-RESEARCH.md`。
 > 目标:把局内 AI 玩家的 LLM 提示词从「逐次累积的补丁拼接」重做成「**人物卡优先(先做人再玩游戏)+ 模块化分层**」的体系,并修复「好人 AI 集体冤杀跳身份预言家」的系统性 bug。
-> **状态:计划已定稿待实施(尚未动代码)。** 只改 `ai-proxy` 提示词层 + `shared/personas.ts` 人物卡数据 + 新增模块/文档;逻辑层(rules/store)不动。
+> **状态:✅ 已实施(2026-06-21)。** 代码层全部落地:`shared/personas.ts` 加 `NAME_CHARACTERS`+`characterForName`;`ai-proxy/prompt/*` 分层(character/table/worldModel/playbook/reasoning/task/output/index);传输拆 `llm.ts`、错误拆 `errors.ts`、温度/模型路由进 `config.ts`;`handler.ts` 瘦身。基线 `tsc -b`/`npm test`(160 绿)/`npm run build` 均绿。剩余=手测验证(见 §5)。下文保留作设计依据。
 
 ---
 

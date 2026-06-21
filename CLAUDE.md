@@ -4,7 +4,7 @@
 >
 > **🎨 进行中：前端重设计（借鉴 wolfcha，落地环形牌桌）。视觉方向已定稿（方案 C），权威计划见 `docs/FRONTEND-REDESIGN.md`，预览基准 `preview/wolfcha-mockup-balanced.html`。下一步从该文档的「阶段 0」开始。逻辑层不动，只改 UI 层。**
 >
-> **🤖 待实施：AI 玩家提示词顶层重构（人物卡优先「先做人再玩游戏」+ 模块化分层）。修复「好人 AI 集体冤杀跳身份预言家」的系统性 bug。计划已定稿（未动代码），权威交接见 `docs/AI-PROMPT-REDESIGN.md`，调研依据见 `docs/AI-PROMPT-RESEARCH.md`。决策=固定老朋友·静态丰富人物卡（不采 wolfcha 式现生成，留作未来）；只改 ai-proxy 提示词层 + shared/personas 人物卡数据 + 新增 prompt/ 模块,逻辑层不动。**
+> **🤖 已完成（代码层）：AI 玩家提示词顶层重构（人物卡优先「先做人再玩游戏」+ 模块化分层）。见下方「现状基线 › AI 提示词体系重构」。计划/调研留底 `docs/AI-PROMPT-REDESIGN.md` + `docs/AI-PROMPT-RESEARCH.md`。剩余=手测验证（真人当预言家硬跳查杀，好人 AI 不再集体冤神）。**
 
 ## 这个项目是什么
 
@@ -80,6 +80,16 @@
 - **随时重开**：`confirmNewGame` 放宽——`review` **或** `dead_spectating` 均可开新局（事件 `fromPhase` 用实际相位）。UI `ActionArea` 旁观面板给「直接重开一局」按钮（**不受 `busy` 禁用**，方便观战途中立即重开）。
 - **并发安全网（关键）**：旁观自动推进期间 `busy` 全程为 true、旧 driver 仍在 `await` LLM；此时点「重开」会发起新 `dispatch`。`gameStore` 引入闭包 `generation` 代数：每次 `dispatch` 先 `++generation` 认领当前代；`drive(state, gen)` 据此判 `isCancelled`/守 `onStep`/`onHalt`，旧驱动一旦过期立刻停手且**绝不回写**已重置的开局态。`runAiDriver` 新增 `isCancelled?()`（循环顶 + AI await 后各查一次）。回归：`driver.test.ts`「auto-advances…」「stops driving when cancelled」、`fast-forward.test.ts` 重写为旁观自动确认/随时重开。
 - 基线：`tsc -b` 绿、`npm test` **145 绿**、`npm run build` 绿。
+
+### AI 提示词体系重构：人物卡优先 + 模块化分层（2026-06-21）
+
+- **目标**：把局内 AI 玩家的 system prompt 从「`handler.ts` 里约 9 块文本线性拼接、逐次累积」重做成「**人物卡优先（先做人再玩游戏）+ L0–L6 分层模块**」，并修「好人 AI 把自信硬跳查杀的真预言家当狼、集体冤神」的系统性 bug。权威计划 `docs/AI-PROMPT-REDESIGN.md`、调研 `docs/AI-PROMPT-RESEARCH.md`。**只动 ai-proxy 提示词层 + shared/personas 数据，逻辑层（rules/store）一行没碰。**
+- **治本点**：把「怎么读跳身份/查杀/对跳」的判读知识从零散补在 `vote` 任务里，**上移成一份所有任务都继承的世界模型（L2）**——核心原则：①神职（尤预言家）是好人唯一硬信息源；②跳身份/自信硬跳本身不是破绽，**判真假的唯一触发条件是「对跳」**；③无对跳的孤身单跳查杀默认采信并归票，把真神当狼推＝替狼杀神。好人打法（L3）再把这条落成「采信无对跳单跳查杀 + 保护真预言家」。今后调打法＝改 L2/L3 原则数据，任务层自动继承，不再往任务层拼补丁。
+- **分层装配**（`src/ai-proxy/prompt/*`，一层一文件、纯函数、各自可单测；`prompt/index.ts` 薄装配 `buildPrompt`）：L0 `character`（人物卡：职业/性格/判断倾向/打法心智，狼额外加伪装风格——`wolfDeception` **只在自己真是狼时渲染**，绝不漏给好人）→ L1 `table`（入桌+座位/身份/阵营+真人AI不可辨，`describeRole/Faction` 就近）→ L2 `worldModel`（全员同一份，含无警长禁令逐字保留）→ L3 `playbook`（好人/狼人**条件装配**，狼叠加队友名单+悍跳+护队友）→ L4 `reasoning`（私有 analysisSummary / 公开 text 分离 + 与历史一致）→ L5 `task`（各 taskType 动作纪律 + `shuffledTargets` 去偏见，已瘦身：判读移走只留动作）→ L6 `output`（OUTPUT_CONTRACT）。
+- **人物卡数据**（`src/shared/personas.ts`）：新增 `NAME_CHARACTERS`（与 `NAME_PERSONAS`/`NAME_DISPOSITIONS` 同键并行）+ `characterForName`，每名加 `profession`/`playMind`/`wolfDeception` 三字段，**手写静态、阵营中立、不含真相**（不采 wolfcha 式每局现生成，留作未来）。`NAME_PERSONAS` 键序绝不动（影响存档复现）。
+- **传输/配置拆分**：传输层抽到 `src/ai-proxy/llm.ts`（`sendToLLM`+请求构造+解析，持 key、调 fetch）；`errors.ts`（`proxyError` 共用）；`config.ts` 加 `temperatureForTask`（**发言类 1.0 高温更自然 / 行动投票类 0.4 低温逻辑优先 / 复盘 0.3**）+ `modelForTask`（mini vs review 路由收拢到配置层）。`handler.ts` 瘦身为「校验→装配→调用」，不再内联任何提示词文本。`buildPrompt`/`PromptMessages` 从 `prompt/index.ts` 导出（测试 import 已改指向；`handleAiRespond` 仍出自 `handler.ts`）。
+- **ISO 红线守住**：user 段仍精确 `safeStringify(vi)`；新文案对所有 role 跑 `buildPrompt` 均 `not.toMatch(/狼人是|预言家是/)`；好人 system 不含「悍跳」、狼 system 不含「保护真预言家」（条件装配可测）。
+- 基线：`tsc -b` 绿、`npm test` **160 绿**（145+15 新：character/worldModel/playbook/config 各模块测试）、`npm run build` 绿。**剩余 = 手测**：真人当预言家首夜查杀一狼、白天硬跳报查杀，预期好人 AI 倾向相信并把票投向被查杀的狼、不再集体踩预言家；发言更有「人味」。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 

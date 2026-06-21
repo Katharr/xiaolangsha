@@ -58,3 +58,35 @@ export function loadProxyConfig(env: Record<string, string | undefined>): ProxyC
     configured: baseUrl.length > 0 && apiKey.length > 0,
   };
 }
+
+/**
+ * 模型路由：复盘问答用更强的 reviewModel，局内发言/行动用更快更省的 model；url/key 共用。
+ * （从旧 handler.ts 内联逻辑收拢到配置层，行为不变。）
+ */
+export function modelForTask(taskType: string, config: ProxyConfig): string {
+  return taskType === "review_question" ? config.reviewModel : config.model;
+}
+
+/**
+ * 温度分层（证据：wolfcha + 调研，见 docs/AI-PROMPT-RESEARCH.md）：
+ * 发言类（speech/tie_speech/last_words）走高温，更自然多样；
+ * 行动/投票类（vote/night_action/witch_action/hunter_shoot）走低温，逻辑优先、少抽风；
+ * 复盘问答是事实复述，走最低温求稳。其余回退中庸。
+ */
+export function temperatureForTask(taskType: string): number {
+  switch (taskType) {
+    case "speech":
+    case "tie_speech":
+    case "last_words":
+      return 1.0;
+    case "vote":
+    case "night_action":
+    case "witch_action":
+    case "hunter_shoot":
+      return 0.4;
+    case "review_question":
+      return 0.3;
+    default:
+      return 0.7;
+  }
+}
