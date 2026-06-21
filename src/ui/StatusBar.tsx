@@ -10,74 +10,59 @@ type StatusBarProps = {
   phase: GamePhase | null;
   participation: HumanParticipationState | null;
   vi: VisibleInformationSnapshot | null;
+  /** 点击「导出日志」调试按钮的回调；未提供则不渲染按钮。 */
+  onExportDebug?: () => void;
 };
 
-type SeatRow = {
-  seat: number;
-  name: string;
-  isViewer: boolean;
-  alive: boolean;
-  isTeammate: boolean;
-};
+/** 调试按钮：导出本局完整日志，方便排查「卡住没动静」。始终可点（不随 busy 禁用）。 */
+function DebugButton({ onExportDebug }: { onExportDebug?: () => void }) {
+  if (!onExportDebug) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="status-debug"
+      title="导出本局完整日志（JSON），用于排查问题"
+      onClick={onExportDebug}
+    >
+      ⛏ 导出日志
+    </button>
+  );
+}
 
 /**
- * 顶部状态栏：相位 / 轮次 / 真人自己的身份 / 玩家存活简表。
- * 严格不显示 AI 身份、不显示真相日志（ISO-001）。
+ * 顶部细条（方案 C topbar）：相位 / 轮次 / 真人自己的身份 / 旁观标 + 右侧调试按钮。
+ * 玩家名单已移到右列「场上速览」。严格不显示 AI 身份、不显示真相日志（ISO-001）。
  */
-export function StatusBar({ phase, participation, vi }: StatusBarProps) {
+export function StatusBar({
+  phase,
+  participation,
+  vi,
+  onExportDebug,
+}: StatusBarProps) {
   const phaseText = phase ? PHASE_LABEL[phase] : "准备中";
 
   if (!vi) {
     return (
       <header className="status-bar" aria-label="状态栏">
         <span className="status-phase">{phaseText}</span>
+        <DebugButton onExportDebug={onExportDebug} />
       </header>
     );
   }
 
   const isNight = phase === "night_action";
   const roundText = isNight ? `第 ${vi.round.night} 夜` : `第 ${vi.round.day} 天`;
-
-  const teammateIds = new Set(vi.teammates.map((t) => t.playerId));
-  const rows: SeatRow[] = [
-    ...vi.alivePlayers.map((player) => ({
-      seat: player.seat,
-      name: player.name,
-      isViewer: player.playerId === vi.viewerId,
-      alive: true,
-      isTeammate: teammateIds.has(player.playerId),
-    })),
-    ...vi.deadPlayers.map((player) => ({
-      seat: player.seat,
-      name: player.name,
-      isViewer: player.playerId === vi.viewerId,
-      alive: false,
-      isTeammate: teammateIds.has(player.playerId),
-    })),
-  ].sort((a, b) => a.seat - b.seat);
-
   const spectating = participation && participation !== "alive";
 
   return (
     <header className="status-bar" aria-label="状态栏">
-      <div className="status-line">
-        <span className="status-phase">{phaseText}</span>
-        <span className="status-round">{roundText}</span>
-        <span className="status-role">你是：{ROLE_LABEL[vi.ownRole]}</span>
-        {spectating ? <span className="status-tag">旁观中</span> : null}
-      </div>
-      <ul className="status-players">
-        {rows.map((row) => (
-          <li
-            key={row.seat}
-            className={row.alive ? "seat-alive" : "seat-dead"}
-          >
-            {row.name}（{row.seat}号）{row.isViewer ? "·你" : ""}
-            {row.isTeammate ? "·狼队友" : ""}{" "}
-            {row.alive ? "存活" : "出局"}
-          </li>
-        ))}
-      </ul>
+      <span className="status-phase">{phaseText}</span>
+      <span className="status-round">{roundText}</span>
+      <span className="status-role">你是：{ROLE_LABEL[vi.ownRole]}</span>
+      {spectating ? <span className="status-tag">旁观中</span> : null}
+      <DebugButton onExportDebug={onExportDebug} />
     </header>
   );
 }

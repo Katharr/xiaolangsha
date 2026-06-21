@@ -283,6 +283,19 @@ export type VisibleInformationSnapshot = {
   votes: VisibleVote[];
   legalActions: LegalAction[];
   canAct: boolean;
+  /**
+   * 夜晚进度播报（非机密）：当前轮到哪类角色行动，供主持人条 / 操作区展示
+   * 「天黑请闭眼，等待预言家查验…」之类的提示。非 night_action 或夜晚已结算时为 null。
+   * 只暴露「当前在等哪个角色」，不含任何具体行动者身份（ISO-001）。
+   */
+  nightStatus?: NightProgress | null;
+};
+
+/** 夜晚进度（非机密）：当前夜晚步骤的角色种类，以及是否在等 viewer 本人行动。 */
+export type NightProgress = {
+  currentStepKind: NightStepKind;
+  /** 当前步是否在等待 viewer 本人出手（true 时 UI 应给控件而非旁观文案）。 */
+  waitingForViewer: boolean;
 };
 
 export type ReviewSpeechRef = {

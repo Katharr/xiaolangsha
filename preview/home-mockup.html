@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 主页预览</title>
+<style>
+  :root{
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:16px; --radius-sm:10px; --shadow:0 6px 22px rgba(0,0,0,.45);
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:
+      radial-gradient(1300px 700px at 50% -12%, #2c2618 0%, transparent 58%),
+      radial-gradient(900px 600px at 50% 120%, #1d2530 0%, transparent 55%),
+      var(--bg-0);
+    color:var(--ink); font-family:var(--sans);
+    min-height:100%; display:grid; place-items:center; overflow:hidden;
+  }
+
+  /* 顶部极简品牌条（与游戏内 StatusBar 呼应，但更轻） */
+  .topline{ position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:10px;
+    padding:14px 24px; font-size:.82rem; color:var(--ink-faint); letter-spacing:1px; }
+  .topline .dot{ width:7px; height:7px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  .topline b{ color:var(--ink-dim); font-weight:600; }
+
+  /* ============ 主舞台 ============ */
+  .home{ position:relative; width:min(92vw,940px); padding:24px; text-align:center;
+    animation:rise .8s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(18px); } to{ opacity:1; transform:none; } }
+
+  /* 背景环形牌桌剪影（呼应游戏内圆桌） */
+  .ring{ position:absolute; left:50%; top:46%; transform:translate(-50%,-50%);
+    width:min(78vw,560px); aspect-ratio:1; border-radius:50%;
+    border:1px dashed rgba(216,178,90,.14);
+    box-shadow:inset 0 0 120px rgba(0,0,0,.5);
+    pointer-events:none; z-index:0; }
+  .ring::before{ content:""; position:absolute; inset:11%; border-radius:50%;
+    border:1px solid rgba(255,255,255,.04); }
+  .ring i{ position:absolute; width:11px; height:11px; border-radius:50%;
+    transform:translate(-50%,-50%); opacity:.55; box-shadow:0 0 8px currentColor; }
+
+  .hero{ position:relative; z-index:1; }
+
+  /* 月亮徽标 */
+  .moon{ width:84px; height:84px; border-radius:50%; margin:0 auto 22px;
+    background:radial-gradient(circle at 36% 30%, #e7ecf6, #aab4cc 55%, #6b7691);
+    box-shadow:0 0 46px rgba(150,170,220,.5), 0 0 0 1px rgba(255,255,255,.12), inset -10px -12px 22px rgba(40,48,70,.55);
+    position:relative; }
+  .moon::after{ content:""; position:absolute; left:58%; top:30%; width:13px; height:13px; border-radius:50%;
+    background:rgba(90,100,130,.35); box-shadow:-22px 16px 0 -4px rgba(90,100,130,.28), -6px 30px 0 -3px rgba(90,100,130,.22); }
+
+  .title{ font-family:var(--serif); font-size:clamp(48px,8vw,86px); letter-spacing:.22em;
+    margin:0 0 2px; color:var(--gold);
+    text-shadow:0 2px 0 rgba(0,0,0,.4), 0 0 34px rgba(216,178,90,.28); }
+  .subtitle{ font-size:.92rem; letter-spacing:.42em; color:var(--ink-faint); margin:0 0 6px;
+    text-transform:uppercase; }
+  .tagline{ font-size:1.02rem; color:var(--ink-dim); margin:0 auto 38px; max-width:30em; line-height:1.7; }
+  .tagline b{ color:var(--ink); font-weight:600; }
+
+  /* 模式卡片 */
+  .modes{ display:flex; gap:22px; justify-content:center; flex-wrap:wrap; }
+  .mode{ position:relative; width:330px; text-align:left;
+    background:linear-gradient(180deg,var(--bg-2),var(--bg-1));
+    border:1px solid var(--line); border-radius:var(--radius); padding:24px 24px 22px;
+    box-shadow:var(--shadow); transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease; cursor:pointer; }
+  .mode:hover{ transform:translateY(-4px); border-color:var(--gold-soft);
+    box-shadow:0 14px 34px rgba(0,0,0,.5), 0 0 0 1px rgba(216,178,90,.2); }
+  .mode.primary{ border-color:rgba(216,178,90,.45);
+    background:linear-gradient(180deg,#2c2517,var(--bg-1)); }
+
+  .mode .head{ display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  .mode .emoji{ font-size:1.7rem; width:46px; height:46px; flex:0 0 auto; border-radius:12px;
+    display:grid; place-items:center; background:var(--bg-3); border:1px solid var(--line); }
+  .mode.primary .emoji{ background:rgba(216,178,90,.14); border-color:rgba(216,178,90,.4); }
+  .mode h3{ font-family:var(--serif); font-size:1.5rem; margin:0; color:var(--ink); letter-spacing:.06em; }
+  .mode .pill{ font-size:.72rem; color:var(--gold); border:1px solid var(--gold-soft);
+    padding:1px 9px; border-radius:20px; margin-left:auto; white-space:nowrap; }
+  .mode.free .pill{ color:var(--ink-dim); border-color:var(--line); }
+
+  .mode p{ font-size:.9rem; color:var(--ink-dim); line-height:1.65; margin:10px 0 16px; min-height:3.3em; }
+
+  .roles{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:20px; min-height:26px; }
+  .chip{ font-size:.76rem; color:var(--ink-dim); background:var(--bg-3); border:1px solid var(--line);
+    padding:3px 9px; border-radius:8px; white-space:nowrap; }
+  .chip b{ color:var(--ink); font-weight:600; }
+
+  .go{ display:flex; align-items:center; justify-content:space-between; }
+  .btn{ font:inherit; cursor:pointer; padding:11px 24px; border-radius:var(--radius-sm); font-weight:600;
+    border:1px solid var(--gold-soft); color:#2a210c; background:linear-gradient(180deg,#d8b25a,#b8954a);
+    transition:filter .15s ease; }
+  .btn:hover{ filter:brightness(1.08); }
+  .btn.ghost{ background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.ghost:hover{ border-color:var(--gold-soft); color:var(--gold); filter:none; }
+  .go .meta{ font-size:.78rem; color:var(--ink-faint); }
+
+  .footnote{ margin-top:34px; font-size:.78rem; color:var(--ink-faint); letter-spacing:.04em; }
+  .footnote span{ color:var(--gold-soft); }
+
+  @media (max-width:560px){
+    .ring{ display:none; }
+    .mode{ width:100%; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="topline"><span class="dot"></span><b>小狼杀</b> · 与 AI 对弈的推理之夜</div>
+
+  <main class="home">
+    <!-- 背景环形牌桌剪影 + 7 个座位光点（呼应游戏内圆桌） -->
+    <div class="ring" id="ring" aria-hidden="true"></div>
+
+    <div class="hero">
+      <div class="moon" aria-hidden="true"></div>
+      <h1 class="title">小狼杀</h1>
+      <p class="subtitle">W E R E W O L F</p>
+      <p class="tagline">一个人，一桌 AI。<b>白天唇枪舌战，夜晚刀光暗涌</b>——<br/>读心、伪装、投票放逐，看你能否活到最后。</p>
+
+      <div class="modes">
+        <div class="mode primary">
+          <div class="head">
+            <span class="emoji">🌙</span>
+            <h3>标准局</h3>
+            <span class="pill">7 人 · 屠边</span>
+          </div>
+          <p>经典 7 人配置，随机发牌。1 名真人 + 6 名 AI，玩到一方屠边获胜。</p>
+          <div class="roles">
+            <span class="chip">🐺 <b>狼人</b>×2</span>
+            <span class="chip">👤 <b>村民</b>×2</span>
+            <span class="chip">🔮 预言家</span>
+            <span class="chip">🧪 女巫</span>
+            <span class="chip">🎯 猎人</span>
+          </div>
+          <div class="go">
+            <button class="btn">开始标准局</button>
+            <span class="meta">随机身份</span>
+          </div>
+        </div>
+
+        <div class="mode free">
+          <div class="head">
+            <span class="emoji">🎴</span>
+            <h3>练习 / 自由局</h3>
+            <span class="pill">自选身份</span>
+          </div>
+          <p>挑一个你想练的身份反复打磨：体会预言家的查验、女巫的抉择、狼人的伪装。</p>
+          <div class="roles">
+            <span class="chip">自选 <b>狼人</b></span>
+            <span class="chip">自选 <b>预言家</b></span>
+            <span class="chip">自选 <b>村民</b></span>
+          </div>
+          <div class="go">
+            <button class="btn ghost">进入自由局</button>
+            <span class="meta">指定身份</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="footnote">由 <span>gpt-5.5</span> 驱动的 AI 玩家 · 严格信息隔离 · 单机本地可玩</p>
+    </div>
+  </main>
+
+<script>
+  // 在背景环上摆 7 个座位光点（座位 6 色循环，1 号金色=「你」）。
+  const SEAT = ['#d8b25a','#d59a4e','#5b91c9','#b07cc4','#d4685a','#44b2a6','#6fae8f'];
+  const ring = document.getElementById('ring');
+  const N = 7;
+  for(let i=0;i<N;i++){
+    const a = (-90 + i*360/N) * Math.PI/180;
+    const x = 50 + 47*Math.cos(a), y = 50 + 47*Math.sin(a);
+    const d = document.createElement('i');
+    d.style.left = x+'%'; d.style.top = y+'%';
+    d.style.color = SEAT[i%SEAT.length];
+    d.style.background = SEAT[i%SEAT.length];
+    ring.appendChild(d);
+  }
+</script>
+</body>
+</html>

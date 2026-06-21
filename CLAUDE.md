@@ -50,11 +50,18 @@
 ### 前端重设计（2026-06-21 起，进行中）
 
 - **目标**：借鉴 GitHub `oil-oil/wolfcha` 的前端视觉/交互，把朴素聊天室 UI 升级成「深色复古 + 环形牌桌」。逻辑层（store/rules/shared）一行不动，**只改 UI 层**。
-- **视觉方向已定稿 = 方案 C**（发言流主导 + 紧凑牌桌 + 当前发言者中央舞台 + 场上速览 + 一体化发言输入区）。
-- **权威计划见 `docs/FRONTEND-REDESIGN.md`**（决策、红线、设计 token、现有 UI 盘点、阶段 0~6、验证方式都在里面）。
-- **预览基准（已批准）**：`preview/wolfcha-mockup-balanced.html`（纯静态稿，双击可看；备选 A/B 两版同目录、已弃可删）。
-- **下一步 = 阶段 0**：新增 `src/ui/theme.css` 建立设计 token + 切深色主题底座（不崩、测试绿）。
-- 样式方案：**纯 CSS 变量 + Framer Motion**（不引 Tailwind/组件库）。头像用 DiceBear（`adventurer` 风格）。
+- **视觉方向已定稿 = 方案 C → 三列**（左 信息列＝私密+公开面板 ｜ 中 发言流+操作 ｜ 右 紧凑牌桌+速览；当前发言者中央舞台；名字一律座位色+加粗高亮）。
+- **权威计划见 `docs/FRONTEND-REDESIGN.md`**（决策、红线、设计 token、信息面板规范、名字着色规范、现有 UI 盘点、阶段计划、验证方式都在里面）。
+- **预览基准（已批准）= `preview/wolfcha-mockup-3col.html`**（三列，纯静态稿，双击可看；两列稿 `-balanced` 及 A/B 稿已弃可删）。
+- **进度**：阶段 0（token+深色）✅、阶段 1（环形牌桌 SeatRing/Roster + StatusBar 瘦身 + 响应式 + 铺满窗口）✅、阶段 1.5（三列 grid + `InfoPanel` 私密/公开信息面板 + 统一 `PlayerName` 着色组件）✅、阶段 2（DiceBear 头像）✅、阶段 3（天黑/天亮过场 `src/ui/PhaseTransition.tsx` + 舞台高亮进出，framer-motion@12；`body.is-day` 由它按相位驱动）✅、**主页重设计**（`src/ui/HomeScreen.tsx`+`home.css`，深色夜晚氛围：极光/星空/余烬/自转牌桌/呼吸月亮/流光标题 + 两张模式卡片；`App.tsx` 在 `phase===null||"mode_select"` 时整屏渲染，`!ready` 走 `.app-boot`；预览 `preview/home-mockup-v2.html`；132 绿/build 绿）✅、**选身份页重设计**（`src/ui/RoleSelectScreen.tsx`+`home.css` 的 `.rs-*`，复用主页背景；修复旧 `role_setup` 因空壳 vi 渲染出空牌桌的破相；`App.tsx` 在 `phase==="role_setup"` 整屏渲染；落地全局排版红线「按意群断句 `.nb`」见 FRONTEND-REDESIGN.md；预览 `preview/role-select-mockup.html`；132 绿/build 绿）✅。**下一步 = 阶段 4：投票可视化**（详见 FRONTEND-REDESIGN.md）。
+- 样式方案：**纯 CSS 变量 + Framer Motion**（不引 Tailwind/组件库）。头像用 DiceBear `adventurer` **本地包**（`@dicebear/core`+`@dicebear/adventurer`，seed=座位号，`src/ui/Avatar.tsx`）。过场动画用 `framer-motion@12`。
+
+### 调试 / 主持人播报（2026-06-21）
+
+- **夜晚主持人播报**：`VisibleInformationSnapshot.nightStatus`（`{currentStepKind, waitingForViewer}`，由 `visibility.ts` 的 `buildNightStatus` 产出，只暴露「当前在等哪类角色」不含具体行动者身份 → 守 ISO-001）。UI 落地：`ActionArea` 夜晚等待文案 +「主持人正在等待预言家查验…」、`MessageStream` 匿名夜晚气泡同播报；标签 `NIGHT_STEP_LABEL`（labels.ts）。
+- **驱动停止诊断**：`runAiDriver` 新增 `onHalt(DriverHalt)`，区分 `idle`/`completed`（正常）与 `ai_error`/`invalid_payload`/`rule_rejected`/`max_steps`（异常卡住）；`isAbnormalHalt()` 判定。store 存 `diagnostics`，`App.tsx` 在非 busy 且异常时浮层提示「⚠️ … 请导出日志」（`.halt-banner`）。这是「天黑卡住没动静」的根因可视化。
+- **导出日志按钮**：顶部 `StatusBar` 右侧「⛏ 导出日志」→ `store.exportDebugLog()` 返回完整真相 JSON（summary 含 phase/round/diagnostics/nightState 步骤 + 全部 TruthEvent），下载成 `wolf-debug-<gameId>-seq<NNN>.json`，供离线排查。**仅 debug 用，含 AI 身份/夜晚密谋，不在局内 UI 展示。**
+- 基线：`tsc -b` 绿、`npm test` **136 绿**、`npm run build` 绿。
 
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 

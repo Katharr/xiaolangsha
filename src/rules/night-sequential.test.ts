@@ -217,6 +217,63 @@ describe("顺序夜晚 + 女巫 + 屠边", () => {
     expect(seerView.teammates).toEqual([]);
   });
 
+  it("nightStatus 播报当前夜晚步骤：首夜先狼步，随当前步推进而切换", () => {
+    let state = reachFirstNight();
+    const [wolf1, wolf2] = idsByRole(state.snapshot, "werewolf");
+    const seer = idsByRole(state.snapshot, "seer")[0];
+
+    // 首夜当前步是狼步：所有视角都播报「狼人行动」，但只有狼在等自己出手。
+    const wolfStatus = buildVisibleInformation(wolf1, state.snapshot, state.events)
+      .nightStatus;
+    expect(wolfStatus?.currentStepKind).toBe("werewolf_kill");
+    expect(wolfStatus?.waitingForViewer).toBe(true);
+    const seerStatusAtWolf = buildVisibleInformation(seer, state.snapshot, state.events)
+      .nightStatus;
+    expect(seerStatusAtWolf?.currentStepKind).toBe("werewolf_kill");
+    expect(seerStatusAtWolf?.waitingForViewer).toBe(false);
+
+    // 两狼提交完 → 推进到预言家步，nightStatus 同步切到 seer_check。
+    state = step(state, {
+      type: "submit_night_action",
+      idempotencyKey: key("w1"),
+      actorId: wolf1,
+      actionType: "werewolf_kill",
+      targetId: seer,
+    });
+    state = step(state, {
+      type: "submit_night_action",
+      idempotencyKey: key("w2"),
+      actorId: wolf2,
+      actionType: "werewolf_kill",
+      targetId: seer,
+    });
+    const seerStatus = buildVisibleInformation(seer, state.snapshot, state.events)
+      .nightStatus;
+    expect(seerStatus?.currentStepKind).toBe("seer_check");
+    expect(seerStatus?.waitingForViewer).toBe(true);
+
+    // 白天阶段不再有夜晚播报。
+    const dayState = step(state, {
+      type: "submit_night_action",
+      idempotencyKey: key("seer-check"),
+      actorId: seer,
+      actionType: "seer_check",
+      targetId: wolf1,
+    });
+    const witch = idsByRole(dayState.snapshot, "witch")[0];
+    const witchSaved = step(dayState, {
+      type: "submit_witch_action",
+      idempotencyKey: key("witch-skip"),
+      actorId: witch,
+      witchChoice: "skip",
+    });
+    expect(witchSaved.snapshot.gamePhase).toBe("day_announcement");
+    expect(
+      buildVisibleInformation(seer, witchSaved.snapshot, witchSaved.events)
+        .nightStatus,
+    ).toBeNull();
+  });
+
   it("女巫毒药毒杀目标；被刀者无人救则死亡（两死）", () => {
     let state = reachFirstNight();
     const [wolf1, wolf2] = idsByRole(state.snapshot, "werewolf");

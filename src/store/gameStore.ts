@@ -25,7 +25,7 @@ import type {
   VisibleInformationSnapshot,
 } from "../shared";
 
-import type { DriverState, InGameTaskType } from "./driver";
+import type { DriverHalt, DriverState, InGameTaskType } from "./driver";
 import { runAiDriver } from "./driver";
 import { deriveMessages, type ChatMessage } from "./messages";
 
@@ -70,6 +70,11 @@ export type GameStoreState = {
   participation: HumanParticipationState | null;
   /** 完整真相只在 review 阶段组装（ISO-002）；其余阶段恒为 null。 */
   reviewContext: ReviewContext | null;
+  /**
+   * 上一次自动轮转停下的原因（诊断用）。正常等真人时为 idle/completed；
+   * AI 出错 / 规则拒绝 / 步数耗尽时为异常原因——「天黑没动静」时据此提示并导出日志。
+   */
+  diagnostics: DriverHalt | null;
 
   /** 启动恢复：读存档→校验→（必要时）续跑 AI。 */
   bootstrap: () => Promise<void>;
@@ -80,6 +85,11 @@ export type GameStoreState = {
    * 返回 AI 回答文本或错误，由 UI 自行维护问答记录。
    */
   askReview: (question: string) => Promise<Result<string>>;
+  /**
+   * 导出当前对局的完整调试日志（JSON 字符串）：含 session / 完整快照 / 全部 TruthEvent /
+   * 诊断信息。这是**完整真相**（含 AI 身份、夜晚密谋），仅供离线 debug，不在 UI 内展示。
+   */
+  exportDebugLog: () => string;
 };
 
 export type GameStore = StoreApi<GameStoreState>;
@@ -151,6 +161,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         humanPlayerId: state.session.humanPlayerId,
         now: nowProvider,
         onStep: commit,
+        onHalt: (halt) => set({ diagnostics: halt }),
         onActorThinking: ({ actorId, taskType }) => {
           const snapshot = get().snapshot;
           const player = snapshot?.players.find(
@@ -185,6 +196,7 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
       phase: null,
       participation: null,
       reviewContext: null,
+      diagnostics: null,
 
       bootstrap: async () => {
         set({ busy: true, lastError: null });
@@ -291,6 +303,42 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
         }
         const text = (response.data.text ?? "").trim();
         return { ok: true, data: text.length > 0 ? text : "（AI 未给出回答）" };
+      },
+
+      exportDebugLog: (): string => {
+        const s = get();
+        const snapshot = s.snapshot;
+        // 顶部摘要：最常用来定位「卡在哪一步」的字段，放最前面便于一眼看清。
+        const summary = {
+          phase: s.phase,
+          participation: s.participation,
+          round: snapshot?.round ?? null,
+          diagnostics: s.diagnostics,
+          lastError: s.lastError,
+          busy: s.busy,
+          eventCount: s.events.length,
+          night: snapshot?.nightState
+            ? {
+                night: snapshot.nightState.night,
+                resolved: snapshot.nightState.resolved,
+                currentStepIndex: snapshot.nightState.currentStepIndex,
+                steps: snapshot.nightState.steps.map((step) => ({
+                  kind: step.kind,
+                  actorIds: step.actorIds,
+                  submittedActorIds: step.submittedActorIds,
+                })),
+              }
+            : null,
+        };
+        const payload = {
+          exportedAt: nowProvider(),
+          summary,
+          // 完整真相（含 AI 身份、夜晚密谋）——仅供离线排查。
+          session: s.session,
+          snapshot,
+          events: s.events,
+        };
+        return JSON.stringify(payload, null, 2);
       },
     };
   });

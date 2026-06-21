@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 选身份页预览</title>
+<style>
+  :root{
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --silver:#a9b6d4; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:18px; --radius-sm:11px; --shadow:0 6px 22px rgba(0,0,0,.45);
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:var(--bg-0);
+    color:var(--ink); font-family:var(--sans);
+    min-height:100%; display:grid; place-items:center; overflow:hidden; position:relative;
+  }
+
+  /* ===================== 背景动效层（与主页同款，连成一套入场流） ===================== */
+  .aurora{ position:fixed; inset:-25%; z-index:0; filter:blur(70px); pointer-events:none; }
+  .aurora b{ position:absolute; display:block; border-radius:50%; mix-blend-mode:screen; opacity:.55; }
+  .aurora .b1{ width:46vw; height:46vw; left:8%; top:-6%;
+    background:radial-gradient(circle, rgba(216,178,90,.55), transparent 62%); animation:drift1 26s ease-in-out infinite alternate; }
+  .aurora .b2{ width:50vw; height:50vw; right:2%; top:18%;
+    background:radial-gradient(circle, rgba(91,145,201,.45), transparent 64%); animation:drift2 32s ease-in-out infinite alternate; }
+  .aurora .b3{ width:42vw; height:42vw; left:26%; bottom:-14%;
+    background:radial-gradient(circle, rgba(192,86,63,.34), transparent 62%); animation:drift3 30s ease-in-out infinite alternate; }
+  @keyframes drift1{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(7%,5%) scale(1.12); } }
+  @keyframes drift2{ from{ transform:translate(0,0) scale(1.05); } to{ transform:translate(-8%,-4%) scale(.92); } }
+  @keyframes drift3{ from{ transform:translate(0,0) scale(.95); } to{ transform:translate(5%,-6%) scale(1.15); } }
+
+  .veil{ position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:
+      radial-gradient(1300px 720px at 50% -14%, rgba(54,46,28,.7) 0%, transparent 56%),
+      radial-gradient(900px 620px at 50% 122%, rgba(34,44,62,.6) 0%, transparent 54%),
+      radial-gradient(120% 120% at 50% 50%, transparent 58%, rgba(0,0,0,.55) 100%);
+  }
+
+  .stars{ position:fixed; inset:0; z-index:1; pointer-events:none; }
+  .stars i{ position:absolute; width:2px; height:2px; border-radius:50%; background:#f2ecda; opacity:.5;
+    animation:twinkle var(--dur,4s) ease-in-out var(--del,0s) infinite; }
+  @keyframes twinkle{ 0%,100%{ opacity:.12; } 50%{ opacity:.85; } }
+
+  .embers{ position:fixed; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+  .embers i{ position:absolute; bottom:-12px; width:4px; height:4px; border-radius:50%;
+    background:radial-gradient(circle, #f3d488, rgba(216,178,90,.2) 60%, transparent 70%);
+    box-shadow:0 0 8px rgba(216,178,90,.7); opacity:0; animation:rise var(--dur,14s) linear var(--del,0s) infinite; }
+  @keyframes rise{
+    0%{ transform:translateY(0) translateX(0); opacity:0; }
+    8%{ opacity:.9; }
+    50%{ transform:translateY(-52vh) translateX(var(--sway,16px)); }
+    90%{ opacity:.65; }
+    100%{ transform:translateY(-104vh) translateX(0); opacity:0; }
+  }
+
+  /* 自转环形牌桌剪影 */
+  .ring{ position:fixed; left:50%; top:46%; transform:translate(-50%,-50%); z-index:0;
+    width:min(82vw,640px); aspect-ratio:1; pointer-events:none; animation:spin 120s linear infinite; }
+  @keyframes spin{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
+  .ring .r{ position:absolute; inset:0; border-radius:50%; border:1px dashed rgba(216,178,90,.13); }
+  .ring .r::before{ content:""; position:absolute; inset:12%; border-radius:50%; border:1px solid rgba(255,255,255,.04); }
+  .ring i{ position:absolute; width:12px; height:12px; border-radius:50%; transform:translate(-50%,-50%);
+    opacity:.6; box-shadow:0 0 10px currentColor; }
+
+  /* ===================== 主舞台 ===================== */
+  .wrap{ position:relative; z-index:3; width:min(94vw,940px); padding:24px; text-align:center;
+    animation:appear .9s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes appear{ from{ opacity:0; transform:translateY(20px); } to{ opacity:1; transform:none; } }
+
+  .back{ position:fixed; top:22px; left:24px; z-index:4; font-size:.86rem; color:var(--ink-faint);
+    background:rgba(0,0,0,.3); border:1px solid var(--line); border-radius:20px; padding:7px 16px;
+    cursor:pointer; transition:.18s; }
+  .back:hover{ color:var(--gold); border-color:var(--gold-soft); }
+
+  .eyebrow{ font-size:.82rem; letter-spacing:.5em; color:var(--ink-faint); margin:0 0 10px; padding-left:.5em; }
+  .title{ font-family:var(--serif); font-size:clamp(34px,5.4vw,58px); letter-spacing:.16em; margin:0 0 6px;
+    line-height:1.1;
+    background:linear-gradient(100deg,#b8954a 0%,#f2dca0 30%,#d8b25a 50%,#f4e3b4 70%,#b8954a 100%);
+    background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 2px 30px rgba(216,178,90,.22); animation:shimmer 7s linear infinite; text-wrap:balance; }
+  @keyframes shimmer{ to{ background-position:220% 0; } }
+  /* text-wrap:balance 让各行长度均衡；中文逐字断行，故再用 .nb 把有含义的词组整体包住，
+     换行只发生在词组之间 / 标点处，避免「反复打磨」这类词被从中间拆开。 */
+  .lede{ font-size:1rem; color:var(--ink-dim); margin:0 auto 30px; max-width:34em; line-height:1.7;
+    text-wrap:balance; }
+  .lede b{ color:var(--ink); font-weight:600; }
+  .nb{ white-space:nowrap; }
+
+  /* ===================== 角色卡片网格 ===================== */
+  /* flex 居中换行：每排都居中、卡片等宽，折行时自然变 3+2 而非 4+1 拖尾。 */
+  .roles{ display:flex; flex-wrap:wrap; justify-content:center; gap:16px;
+    max-width:900px; margin:0 auto; }
+  .role{ position:relative; overflow:hidden; text-align:left; cursor:pointer;
+    flex:1 1 165px; max-width:200px;
+    border-radius:var(--radius); padding:20px 18px 18px;
+    background:linear-gradient(180deg, rgba(48,42,33,.92), rgba(26,22,17,.95));
+    box-shadow:0 10px 30px rgba(0,0,0,.45);
+    transition:transform .22s cubic-bezier(.2,.7,.2,1), box-shadow .22s ease; }
+  /* 渐变描边（默认银/中性，选中转金） */
+  .role::before{ content:""; position:absolute; inset:0; border-radius:inherit; padding:1px;
+    background:linear-gradient(150deg, rgba(169,182,212,.4), rgba(169,182,212,.05) 42%, transparent 72%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; transition:.22s; }
+  .role:hover{ transform:translateY(-5px); box-shadow:0 18px 40px rgba(0,0,0,.55), 0 0 26px rgba(216,178,90,.1); }
+  .role.sel{ box-shadow:0 18px 44px rgba(0,0,0,.55), 0 0 30px rgba(216,178,90,.22); }
+  .role.sel::before{ background:linear-gradient(150deg, rgba(216,178,90,.85), rgba(216,178,90,.12) 45%, transparent 72%); }
+  .role .check{ position:absolute; top:14px; right:14px; width:22px; height:22px; border-radius:50%;
+    display:grid; place-items:center; font-size:.72rem; color:#2a210c; font-weight:800;
+    background:var(--gold); opacity:0; transform:scale(.6); transition:.2s; }
+  .role.sel .check{ opacity:1; transform:scale(1); }
+
+  .medal{ width:58px; height:58px; border-radius:50%; display:grid; place-items:center; font-size:1.8rem;
+    margin-bottom:14px; position:relative; z-index:1;
+    background:radial-gradient(circle at 36% 30%, #3c321b, #201b13);
+    border:1px solid rgba(216,178,90,.42);
+    box-shadow:inset 0 0 18px rgba(216,178,90,.16), 0 0 0 5px rgba(216,178,90,.05), 0 6px 16px rgba(0,0,0,.5); }
+  .role.wolf .medal{ background:radial-gradient(circle at 36% 30%, #3a1f1a, #1c1311);
+    border-color:rgba(192,86,63,.5); box-shadow:inset 0 0 18px rgba(192,86,63,.18), 0 0 0 5px rgba(192,86,63,.05), 0 6px 16px rgba(0,0,0,.5); }
+
+  .role h3{ font-family:var(--serif); font-size:1.32rem; margin:0; color:var(--ink); letter-spacing:.05em;
+    display:flex; align-items:center; flex-wrap:wrap; gap:6px 9px; position:relative; z-index:1; }
+  /* 角色名整体不拆字：放不下时让阵营徽标整块换行，而非把「预言家」拆成 2+1。 */
+  .role h3 .rname{ white-space:nowrap; }
+  .fac{ font-size:.68rem; padding:1px 9px; border-radius:20px; font-weight:600; white-space:nowrap; }
+  .fac.good{ color:var(--good); border:1px solid #2c4a3a; background:#1f3328; }
+  .fac.wolf{ color:#e9a99c; border:1px solid #5a2c26; background:#3a1d18; }
+  .role p{ font-size:.85rem; color:var(--ink-dim); line-height:1.65; margin:10px 0 0; position:relative; z-index:1; }
+
+  /* ===================== 底部确认条 ===================== */
+  .confirm{ margin-top:32px; display:flex; align-items:center; justify-content:center; gap:18px; flex-wrap:wrap; }
+  .picked{ font-size:.92rem; color:var(--ink-dim); }
+  .picked b{ color:var(--gold); font-weight:700; }
+  .cta{ font:inherit; cursor:pointer; padding:13px 40px; border-radius:var(--radius-sm); font-weight:600;
+    display:inline-flex; align-items:center; gap:10px; border:1px solid var(--gold-soft); color:#2a210c;
+    background:linear-gradient(180deg,#e3c069,#b8954a); box-shadow:0 4px 14px rgba(216,178,90,.2);
+    transition:filter .15s ease, gap .2s ease; }
+  .cta:hover{ filter:brightness(1.08); gap:16px; }
+  .cta .arr{ transition:transform .2s ease; }
+  .cta:hover .arr{ transform:translateX(4px); }
+  .foot{ margin-top:26px; font-size:.78rem; color:var(--ink-faint); letter-spacing:.05em; }
+
+  @media (max-width:560px){ .ring,.embers{ display:none; } }
+  @media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+  <div class="aurora"><b class="b1"></b><b class="b2"></b><b class="b3"></b></div>
+  <div class="veil"></div>
+  <div class="stars" id="stars"></div>
+  <div class="embers" id="embers"></div>
+  <div class="ring" id="ring"><div class="r"></div></div>
+
+  <button class="back">← 返回</button>
+
+  <div class="wrap">
+    <p class="eyebrow">F&nbsp;R&nbsp;E&nbsp;E&nbsp;&nbsp;M&nbsp;O&nbsp;D&nbsp;E</p>
+    <h1 class="title">选择你的身份</h1>
+    <p class="lede">
+      <span class="nb">自由局里你说了算。</span><span class="nb">挑一个想练的身份反复打磨——</span><b class="nb">其余 6 名 AI 自动补齐这桌。</b>
+    </p>
+
+    <div class="roles" id="roles">
+      <!-- 卡片由 JS 注入，便于演示选中态 -->
+    </div>
+
+    <div class="confirm">
+      <span class="picked">已选：<b id="pickedName">预言家</b></span>
+      <button class="cta">确认身份 <span class="arr">→</span></button>
+    </div>
+
+    <p class="foot">大语言模型驱动的 AI 玩家 · 严格信息隔离 · 单机本地可玩</p>
+  </div>
+
+<script>
+  // 背景装饰
+  const starsEl = document.getElementById('stars');
+  for(let i=0;i<60;i++){ const s=document.createElement('i');
+    s.style.left=Math.random()*100+'%'; s.style.top=Math.random()*100+'%';
+    s.style.transform='scale('+(0.6+Math.random()*1.4)+')';
+    s.style.setProperty('--dur',(2.5+Math.random()*4)+'s');
+    s.style.setProperty('--del',(Math.random()*5)+'s'); starsEl.appendChild(s); }
+  const embersEl = document.getElementById('embers');
+  for(let i=0;i<14;i++){ const e=document.createElement('i'); const sz=0.7+Math.random()*1.2;
+    e.style.left=Math.random()*100+'%'; e.style.width=(4*sz)+'px'; e.style.height=(4*sz)+'px';
+    e.style.setProperty('--dur',(11+Math.random()*10)+'s');
+    e.style.setProperty('--del',(Math.random()*12)+'s');
+    e.style.setProperty('--sway',(Math.random()*60-30)+'px'); embersEl.appendChild(e); }
+  const ringEl = document.getElementById('ring'); const SEAT=['#d8b25a','#d59a4e','#5b91c9','#b07cc4','#d4685a','#44b2a6','#6fae8f'];
+  for(let i=0;i<7;i++){ const a=((-90+i*360/7)*Math.PI)/180; const d=document.createElement('i');
+    d.style.left=(50+47*Math.cos(a))+'%'; d.style.top=(50+47*Math.sin(a))+'%';
+    d.style.color=SEAT[i]; d.style.background=SEAT[i]; ringEl.appendChild(d); }
+
+  // 角色卡（自由局可选 = 标准 7 人板去重角色：狼人/预言家/女巫/猎人/村民）
+  const ROLES=[
+    {key:'werewolf', icon:'🐺', name:'狼人', fac:'wolf', facLabel:'狼人阵营', desc:'夜晚与狼队共谋刀人，白天伪装潜伏、带节奏出好人。'},
+    {key:'seer',     icon:'🔮', name:'预言家', fac:'good', facLabel:'好人阵营', desc:'每晚查验一名玩家的善恶，是好人阵营的核心信息源。'},
+    {key:'witch',    icon:'🧪', name:'女巫', fac:'good', facLabel:'好人阵营', desc:'一瓶解药一瓶毒药，关键时刻掌握一夜的生杀。'},
+    {key:'hunter',   icon:'🎯', name:'猎人', fac:'good', facLabel:'好人阵营', desc:'被放逐或被刀出局时，可开枪带走场上任意一人。'},
+    {key:'villager', icon:'👤', name:'村民', fac:'good', facLabel:'好人阵营', desc:'没有夜晚能力，全凭白天的发言、逻辑与投票翻盘。'},
+  ];
+  let picked='seer';
+  const rolesEl=document.getElementById('roles');
+  const pickedName=document.getElementById('pickedName');
+  function render(){
+    rolesEl.innerHTML='';
+    ROLES.forEach(r=>{
+      const el=document.createElement('div');
+      el.className='role '+r.fac+(picked===r.key?' sel':'');
+      el.innerHTML=`
+        <span class="check">✓</span>
+        <div class="medal">${r.icon}</div>
+        <h3><span class="rname">${r.name}</span> <span class="fac ${r.fac}">${r.facLabel}</span></h3>
+        <p>${r.desc}</p>`;
+      el.onclick=()=>{ picked=r.key; pickedName.textContent=r.name; render(); };
+      rolesEl.appendChild(el);
+    });
+  }
+  render();
+</script>
+</body>
+</html>

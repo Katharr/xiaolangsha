@@ -2,6 +2,7 @@ import type {
   GameSnapshot,
   LegalAction,
   NightActionType,
+  NightProgress,
   Player,
   PublicDeathRef,
   PublicPlayerRef,
@@ -55,7 +56,36 @@ export function buildVisibleInformation(
     votes: collectVisibleVotes(events, viewerId),
     legalActions: getLegalActions(viewer, snapshot),
     canAct: canViewerAct(viewer, snapshot),
+    nightStatus: buildNightStatus(viewer, snapshot),
   };
+}
+
+/**
+ * 夜晚进度播报：当前夜晚步骤在等哪个角色（守卫/狼人/预言家/女巫），
+ * 以及是否在等 viewer 本人。仅暴露「角色种类」，不含任何具体行动者身份（ISO-001）。
+ * 非 night_action 或夜晚已结算 / 无当前步时返回 null。
+ */
+function buildNightStatus(
+  viewer: Player,
+  snapshot: GameSnapshot,
+): NightProgress | null {
+  if (snapshot.gamePhase !== "night_action") {
+    return null;
+  }
+  const nightState = snapshot.nightState;
+  if (!nightState || nightState.resolved) {
+    return null;
+  }
+  const step = currentNightStep(nightState);
+  if (!step) {
+    return null;
+  }
+  const waitingForViewer =
+    viewer.alive &&
+    !(viewer.isHuman && snapshot.humanParticipationState !== "alive") &&
+    step.actorIds.includes(viewer.playerId) &&
+    !step.submittedActorIds.includes(viewer.playerId);
+  return { currentStepKind: step.kind, waitingForViewer };
 }
 
 /**

@@ -12,8 +12,10 @@ export {
   nextDriverStep,
   taskTypeForPhase,
   payloadToAction,
+  isAbnormalHalt,
   type DriverState,
   type DriverStep,
   type DriverOptions,
+  type DriverHalt,
   type InGameTaskType,
 } from "./driver";

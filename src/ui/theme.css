@@ -1,0 +1,76 @@
+/* ============================================================
+   设计 token —— 深色复古暖褐黑底 + 金色强调（借鉴 wolfcha，方案 C）。
+   预览基准：preview/wolfcha-mockup-balanced.html。
+   逻辑层不动，仅 UI 层引用这些变量。后续阶段（牌桌/头像/过场）继续复用。
+   ============================================================ */
+:root {
+  /* 背景分层：从最深的底到最浅的卡片面 */
+  --bg-0: #14110c;
+  --bg-1: #1c1813;
+  --bg-2: #241f18;
+  --bg-3: #2e2820;
+  --line: #3a3328;
+
+  /* 文字三档：主/次/最弱 */
+  --ink: #ece3d0;
+  --ink-dim: #b3a78d;
+  --ink-faint: #7d745f;
+
+  /* 强调 / 语义色 */
+  --gold: #d8b25a;
+  --gold-soft: #b8954a;
+  --danger: #c0563f;
+  --good: #6fae8f;
+
+  /* 座位 6 色（深色下提亮，按座位号取） */
+  --seat-1: #6fae8f;
+  --seat-2: #d59a4e;
+  --seat-3: #5b91c9;
+  --seat-4: #b07cc4;
+  --seat-5: #d4685a;
+  --seat-6: #44b2a6;
+
+  /* 形状 / 阴影 / 动效时长 */
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  --t-fast: 0.18s;
+  --t-mid: 0.35s;
+
+  /* 字体：衬体标题（阶段/字幕） + 无衬线正文 */
+  --serif: "Songti SC", "STSong", Georgia, "Times New Roman", serif;
+  --sans: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* 白天态：底色更暖更亮一档，主文字更亮（由 body.is-day 切换）。 */
+body.is-day {
+  --bg-0: #1c1810;
+  --bg-1: #28221a;
+  --bg-2: #322a20;
+  --bg-3: #3b3226;
+  --ink: #f4ecda;
+}
+
+/* 文案排版工具：把一个「意群」整体包住不拆行（中文逐字断行的防护）。
+   断点只应落在语义停顿（句末/破折号/分句）处，详见 docs/FRONTEND-REDESIGN.md。 */
+.nb {
+  white-space: nowrap;
+}
+
+/* 全局底座：暖褐黑底 + 顶部微光。 */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1400px 700px at 50% -15%, #2a2418 0%, transparent 60%),
+    var(--bg-0);
+  color: var(--ink);
+  font-family: var(--sans);
+  transition:
+    background var(--t-mid) ease,
+    color var(--t-mid) ease;
+}

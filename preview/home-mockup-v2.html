@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 主页预览 v2</title>
+<style>
+  :root{
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --silver:#a9b6d4; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:18px; --radius-sm:11px; --shadow:0 6px 22px rgba(0,0,0,.45);
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:var(--bg-0);
+    color:var(--ink); font-family:var(--sans);
+    min-height:100%; display:grid; place-items:center; overflow:hidden; position:relative;
+  }
+
+  /* ===================== 背景动效层 ===================== */
+  /* 1) 缓慢漂移的极光光晕（Stripe/Linear 式「活的渐变」） */
+  .aurora{ position:fixed; inset:-25%; z-index:0; filter:blur(70px); pointer-events:none; }
+  .aurora b{ position:absolute; display:block; border-radius:50%; mix-blend-mode:screen; opacity:.55; }
+  .aurora .b1{ width:46vw; height:46vw; left:8%; top:-6%;
+    background:radial-gradient(circle, rgba(216,178,90,.55), transparent 62%); animation:drift1 26s ease-in-out infinite alternate; }
+  .aurora .b2{ width:50vw; height:50vw; right:2%; top:18%;
+    background:radial-gradient(circle, rgba(91,145,201,.45), transparent 64%); animation:drift2 32s ease-in-out infinite alternate; }
+  .aurora .b3{ width:42vw; height:42vw; left:26%; bottom:-14%;
+    background:radial-gradient(circle, rgba(192,86,63,.34), transparent 62%); animation:drift3 30s ease-in-out infinite alternate; }
+  @keyframes drift1{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(7%,5%) scale(1.12); } }
+  @keyframes drift2{ from{ transform:translate(0,0) scale(1.05); } to{ transform:translate(-8%,-4%) scale(.92); } }
+  @keyframes drift3{ from{ transform:translate(0,0) scale(.95); } to{ transform:translate(5%,-6%) scale(1.15); } }
+
+  /* 2) 顶部微光 + 底部冷光 + 暗角，叠出纵深 */
+  .veil{ position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:
+      radial-gradient(1300px 720px at 50% -14%, rgba(54,46,28,.7) 0%, transparent 56%),
+      radial-gradient(900px 620px at 50% 122%, rgba(34,44,62,.6) 0%, transparent 54%),
+      radial-gradient(120% 120% at 50% 50%, transparent 58%, rgba(0,0,0,.55) 100%); }
+
+  /* 3) 星空（JS 注入），缓慢闪烁 */
+  .stars{ position:fixed; inset:0; z-index:1; pointer-events:none; }
+  .stars i{ position:absolute; width:2px; height:2px; border-radius:50%; background:#f2ecda;
+    opacity:.5; animation:twinkle var(--dur,4s) ease-in-out var(--del,0s) infinite; }
+  @keyframes twinkle{ 0%,100%{ opacity:.12; transform:scale(.8); } 50%{ opacity:.85; transform:scale(1.25); } }
+
+  /* 4) 上浮的余烬/萤火（JS 注入） */
+  .embers{ position:fixed; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+  .embers i{ position:absolute; bottom:-12px; width:4px; height:4px; border-radius:50%;
+    background:radial-gradient(circle, #f3d488, rgba(216,178,90,.2) 60%, transparent 70%);
+    box-shadow:0 0 8px rgba(216,178,90,.7); opacity:0;
+    animation:rise-up var(--dur,14s) linear var(--del,0s) infinite; }
+  @keyframes rise-up{
+    0%{ transform:translateY(0) translateX(0); opacity:0; }
+    8%{ opacity:.9; }
+    50%{ transform:translateY(-52vh) translateX(var(--sway,16px)); }
+    90%{ opacity:.65; }
+    100%{ transform:translateY(-104vh) translateX(0); opacity:0; }
+  }
+
+  /* ===================== 主舞台 ===================== */
+  .home{ position:relative; z-index:3; width:min(94vw,1000px); padding:24px; text-align:center;
+    animation:rise .9s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(20px); } to{ opacity:1; transform:none; } }
+
+  /* 背景环形牌桌剪影（缓慢自转，呼应游戏内圆桌） */
+  .ring-rot{ position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); z-index:0;
+    width:min(82vw,620px); aspect-ratio:1; pointer-events:none; animation:spin 120s linear infinite; }
+  @keyframes spin{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
+  .ring-rot .r{ position:absolute; inset:0; border-radius:50%; border:1px dashed rgba(216,178,90,.13); }
+  .ring-rot .r::before{ content:""; position:absolute; inset:12%; border-radius:50%; border:1px solid rgba(255,255,255,.04); }
+  .ring-rot i{ position:absolute; width:12px; height:12px; border-radius:50%; transform:translate(-50%,-50%);
+    opacity:.6; box-shadow:0 0 10px currentColor; }
+
+  .hero{ position:relative; z-index:1; }
+
+  /* 月亮徽标（呼吸光晕） */
+  .moon{ width:88px; height:88px; border-radius:50%; margin:0 auto 24px; position:relative;
+    background:radial-gradient(circle at 36% 30%, #eef2fa, #aeb8d0 54%, #6b7691);
+    box-shadow:0 0 0 1px rgba(255,255,255,.12), inset -11px -13px 24px rgba(38,46,68,.6);
+    animation:moonglow 6s ease-in-out infinite; }
+  @keyframes moonglow{ 0%,100%{ box-shadow:0 0 36px rgba(150,170,220,.42),0 0 0 1px rgba(255,255,255,.12),inset -11px -13px 24px rgba(38,46,68,.6); }
+    50%{ box-shadow:0 0 60px rgba(160,180,230,.62),0 0 0 1px rgba(255,255,255,.16),inset -11px -13px 24px rgba(38,46,68,.6); } }
+  .moon::after{ content:""; position:absolute; left:58%; top:30%; width:13px; height:13px; border-radius:50%;
+    background:rgba(88,98,128,.32); box-shadow:-22px 16px 0 -4px rgba(88,98,128,.26), -6px 30px 0 -3px rgba(88,98,128,.2); }
+
+  .title{ font-family:var(--serif); font-size:clamp(50px,8.5vw,92px); letter-spacing:.24em;
+    margin:0 0 4px; line-height:1.05;
+    background:linear-gradient(100deg,#b8954a 0%,#f2dca0 30%,#d8b25a 50%,#f4e3b4 70%,#b8954a 100%);
+    background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 2px 30px rgba(216,178,90,.22); animation:shimmer 7s linear infinite; }
+  @keyframes shimmer{ to{ background-position:220% 0; } }
+  .subtitle{ font-size:.92rem; letter-spacing:.5em; color:var(--ink-faint); margin:0 0 8px; }
+  .tagline{ font-size:1.04rem; color:var(--ink-dim); margin:0 auto 42px; max-width:32em; line-height:1.75; }
+  .tagline b{ color:var(--ink); font-weight:600; }
+
+  /* ===================== 模式卡片（精修版） ===================== */
+  .modes{ display:flex; gap:24px; justify-content:center; flex-wrap:wrap; align-items:stretch; }
+  .mode{ position:relative; width:348px; text-align:left; overflow:hidden;
+    display:flex; flex-direction:column;
+    border-radius:var(--radius);
+    background:linear-gradient(180deg, rgba(48,42,33,.92), rgba(26,22,17,.95));
+    box-shadow:0 10px 30px rgba(0,0,0,.45);
+    padding:26px 26px 24px; cursor:pointer;
+    transition:transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s ease; }
+  /* 渐变描边（::before 做 1px 边） */
+  .mode::before{ content:""; position:absolute; inset:0; border-radius:inherit; padding:1px;
+    background:linear-gradient(150deg, rgba(216,178,90,.55), rgba(216,178,90,.06) 42%, transparent 72%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; transition:opacity .25s ease; }
+  /* hover 时掠过的高光扫光（::after） */
+  .mode::after{ content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.07) 48%, transparent 62%);
+    transform:translateX(-130%); transition:transform .8s cubic-bezier(.2,.7,.2,1); }
+  .mode:hover{ transform:translateY(-6px); box-shadow:0 20px 44px rgba(0,0,0,.55), 0 0 30px rgba(216,178,90,.12); }
+  .mode:hover::after{ transform:translateX(130%); }
+  .mode.free::before{ background:linear-gradient(150deg, rgba(169,182,212,.5), rgba(169,182,212,.05) 42%, transparent 72%); }
+
+  /* 角落水印大图标 */
+  .mode .watermark{ position:absolute; right:-14px; bottom:-18px; font-size:8rem; line-height:1; opacity:.05;
+    transform:rotate(-12deg); pointer-events:none; }
+
+  /* 推荐缎带 */
+  .ribbon{ position:absolute; top:16px; right:-34px; transform:rotate(45deg); z-index:2;
+    background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; font-size:.7rem; font-weight:700;
+    letter-spacing:.12em; padding:4px 40px; box-shadow:0 3px 10px rgba(0,0,0,.4); }
+
+  /* 徽章式图标 */
+  .medallion{ width:66px; height:66px; border-radius:50%; display:grid; place-items:center; font-size:2.1rem;
+    background:radial-gradient(circle at 36% 30%, #3c321b, #201b13);
+    border:1px solid rgba(216,178,90,.42);
+    box-shadow:inset 0 0 20px rgba(216,178,90,.16), 0 0 0 6px rgba(216,178,90,.05), 0 6px 16px rgba(0,0,0,.5);
+    margin-bottom:16px; position:relative; z-index:1; }
+  .mode.free .medallion{ background:radial-gradient(circle at 36% 30%, #232a3a, #14161f);
+    border-color:rgba(169,182,212,.42); box-shadow:inset 0 0 20px rgba(169,182,212,.16), 0 0 0 6px rgba(169,182,212,.05), 0 6px 16px rgba(0,0,0,.5); }
+
+  .m-title{ display:flex; align-items:center; gap:10px; position:relative; z-index:1; }
+  .m-title h3{ font-family:var(--serif); font-size:1.55rem; margin:0; color:var(--ink); letter-spacing:.06em; }
+  .pill{ font-size:.72rem; color:var(--gold); border:1px solid var(--gold-soft);
+    padding:2px 10px; border-radius:20px; white-space:nowrap; }
+  .mode.free .pill{ color:var(--silver); border-color:rgba(169,182,212,.45); }
+
+  .desc{ font-size:.92rem; color:var(--ink-dim); line-height:1.7; margin:12px 0 18px; min-height:3.4em; position:relative; z-index:1; }
+
+  .roles{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; min-height:28px; position:relative; z-index:1; }
+  .chip{ font-size:.77rem; color:var(--ink-dim); background:rgba(0,0,0,.28); border:1px solid var(--line);
+    padding:4px 10px; border-radius:9px; white-space:nowrap; }
+  .chip b{ color:var(--ink); font-weight:600; }
+
+  .cta{ font:inherit; cursor:pointer; width:100%; margin-top:auto; padding:13px 22px; border-radius:var(--radius-sm); font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:10px; position:relative; z-index:1;
+    border:1px solid var(--gold-soft); color:#2a210c; background:linear-gradient(180deg,#e3c069,#b8954a);
+    transition:filter .15s ease, gap .2s ease; box-shadow:0 4px 14px rgba(216,178,90,.2); }
+  .cta:hover{ filter:brightness(1.08); gap:16px; }
+  .cta .arr{ transition:transform .2s ease; }
+  .cta:hover .arr{ transform:translateX(4px); }
+  .mode.free .cta{ background:transparent; color:var(--ink); border-color:var(--line); box-shadow:none; }
+  .mode.free .cta:hover{ color:var(--silver); border-color:rgba(169,182,212,.55); }
+
+  .footnote{ margin-top:38px; font-size:.79rem; color:var(--ink-faint); letter-spacing:.05em; position:relative; z-index:1; }
+  .footnote span{ color:var(--gold-soft); }
+
+  @media (prefers-reduced-motion: reduce){
+    .aurora b,.stars i,.embers i,.ring-rot,.moon,.title,.home{ animation:none !important; }
+  }
+  @media (max-width:600px){
+    .ring-rot,.embers{ display:none; }
+    .mode{ width:100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="aurora"><b class="b1"></b><b class="b2"></b><b class="b3"></b></div>
+  <div class="veil"></div>
+  <div class="stars" id="stars" aria-hidden="true"></div>
+  <div class="embers" id="embers" aria-hidden="true"></div>
+
+  <main class="home">
+    <div class="ring-rot" id="ring" aria-hidden="true"><div class="r"></div></div>
+
+    <div class="hero">
+      <div class="moon" aria-hidden="true"></div>
+      <h1 class="title">小狼杀</h1>
+      <p class="subtitle">W&nbsp;E&nbsp;R&nbsp;E&nbsp;W&nbsp;O&nbsp;L&nbsp;F</p>
+      <p class="tagline">一个人，一桌 AI。<b>白天唇枪舌战，夜晚刀光暗涌</b>——<br/>读心、伪装、投票放逐，看你能否活到最后。</p>
+
+      <div class="modes">
+        <article class="mode primary">
+          <span class="ribbon">推荐</span>
+          <span class="watermark">🌙</span>
+          <div class="medallion">🌙</div>
+          <div class="m-title"><h3>标准局</h3><span class="pill">7 人 · 屠边</span></div>
+          <p class="desc">经典 7 人配置，随机发牌。1 名真人 + 6 名 AI，玩到一方屠边获胜。</p>
+          <div class="roles">
+            <span class="chip">🐺 <b>狼人</b>×2</span>
+            <span class="chip">👤 <b>村民</b>×2</span>
+            <span class="chip">🔮 预言家</span>
+            <span class="chip">🧪 女巫</span>
+            <span class="chip">🎯 猎人</span>
+          </div>
+          <button class="cta">开始标准局 <span class="arr">→</span></button>
+        </article>
+
+        <article class="mode free">
+          <span class="watermark">🎴</span>
+          <div class="medallion">🎴</div>
+          <div class="m-title"><h3>练习 / 自由局</h3><span class="pill">自选身份</span></div>
+          <p class="desc">挑一个你想练的身份反复打磨：体会预言家的查验、女巫的抉择、狼人的伪装。</p>
+          <div class="roles">
+            <span class="chip">自选 <b>狼人</b></span>
+            <span class="chip">自选 <b>预言家</b></span>
+            <span class="chip">自选 <b>村民</b></span>
+          </div>
+          <button class="cta">进入自由局 <span class="arr">→</span></button>
+        </article>
+      </div>
+
+      <p class="footnote"><span>大语言模型</span>驱动的 AI 玩家 · 严格信息隔离 · 单机本地可玩</p>
+    </div>
+  </main>
+
+<script>
+  // 星空
+  const stars = document.getElementById('stars');
+  for(let i=0;i<64;i++){
+    const s=document.createElement('i');
+    s.style.left=(Math.random()*100)+'%';
+    s.style.top=(Math.random()*100)+'%';
+    s.style.setProperty('--dur',(2.5+Math.random()*4).toFixed(2)+'s');
+    s.style.setProperty('--del',(Math.random()*5).toFixed(2)+'s');
+    const sc=(Math.random()*1.4+.6).toFixed(2); s.style.transform='scale('+sc+')';
+    stars.appendChild(s);
+  }
+  // 余烬上浮
+  const embers=document.getElementById('embers');
+  for(let i=0;i<16;i++){
+    const e=document.createElement('i');
+    e.style.left=(Math.random()*100)+'%';
+    e.style.setProperty('--dur',(11+Math.random()*10).toFixed(2)+'s');
+    e.style.setProperty('--del',(Math.random()*12).toFixed(2)+'s');
+    e.style.setProperty('--sway',((Math.random()*60-30)).toFixed(0)+'px');
+    const sc=(Math.random()*1.2+.7).toFixed(2);
+    e.style.width=(4*sc)+'px'; e.style.height=(4*sc)+'px';
+    embers.appendChild(e);
+  }
+  // 环上 7 个座位光点（座位 6 色循环，1 号金=「你」）
+  const SEAT=['#d8b25a','#d59a4e','#5b91c9','#b07cc4','#d4685a','#44b2a6','#6fae8f'];
+  const ring=document.getElementById('ring'); const N=7;
+  for(let i=0;i<N;i++){
+    const a=(-90+i*360/N)*Math.PI/180;
+    const d=document.createElement('i');
+    d.style.left=(50+47*Math.cos(a))+'%'; d.style.top=(50+47*Math.sin(a))+'%';
+    d.style.color=SEAT[i%SEAT.length]; d.style.background=SEAT[i%SEAT.length];
+    ring.appendChild(d);
+  }
+</script>
+</body>
+</html>

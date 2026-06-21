@@ -13,7 +13,13 @@ import type {
 } from "../shared";
 import { err } from "../shared";
 
-import { nextDriverStep, runAiDriver, type DriverState } from "./driver";
+import {
+  isAbnormalHalt,
+  nextDriverStep,
+  runAiDriver,
+  type DriverHalt,
+  type DriverState,
+} from "./driver";
 
 const boardId = "mvp_5p_wolf_seer_3villagers";
 const humanPlayerId = "human-1";
@@ -237,6 +243,47 @@ describe("runAiDriver", () => {
     // 主 AI 全挂，仍靠脚本兜底跑完夜晚到达天亮播报。
     expect(driven.snapshot.gamePhase).toBe("day_announcement");
     expect(driven.snapshot.nightState?.resolved).toBe(true);
+  });
+
+  it("onHalt reports idle when stopping for the alive human (正常等真人，非异常)", async () => {
+    const ai = new ScriptedAiClient();
+    const halts: DriverHalt[] = [];
+
+    await runAiDriver(reachNight(), {
+      ai,
+      humanPlayerId,
+      now,
+      onHalt: (h) => halts.push(h),
+    });
+
+    expect(halts.at(-1)).toEqual({ reason: "idle", phase: "day_announcement" });
+    expect(isAbnormalHalt(halts.at(-1) ?? null)).toBe(false);
+  });
+
+  it("onHalt reports ai_error when the AI fails with no fallback (异常卡住)", async () => {
+    const failing: AiClient = {
+      async respond() {
+        return err({
+          code: "AI_UNAVAILABLE",
+          message: "primary down",
+          retryable: true,
+          source: "ai_client",
+        });
+      },
+    };
+    const halts: DriverHalt[] = [];
+
+    const driven = await runAiDriver(reachNight(), {
+      ai: failing,
+      humanPlayerId,
+      now,
+      onHalt: (h) => halts.push(h),
+    });
+
+    // 无兜底 → 停在首夜未结算，halt 标为 ai_error（异常）。
+    expect(driven.snapshot.gamePhase).toBe("night_action");
+    expect(halts.at(-1)?.reason).toBe("ai_error");
+    expect(isAbnormalHalt(halts.at(-1) ?? null)).toBe(true);
   });
 
   it("nextDriverStep stops at terminal/setup phases", () => {

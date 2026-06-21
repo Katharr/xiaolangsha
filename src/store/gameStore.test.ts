@@ -88,6 +88,27 @@ describe("createGameStore", () => {
     expect(state.snapshot?.gamePhase).toBe(phaseBefore);
   });
 
+  it("exportDebugLog 导出可解析的完整日志（含 summary / 全部事件 / 诊断）", async () => {
+    const db = freshDb();
+    const store = createGameStore({ ai: new ScriptedAiClient(), db, now });
+    await store.getState().bootstrap();
+    await startFreeVillagerGame(store);
+
+    const json = store.getState().exportDebugLog();
+    const parsed = JSON.parse(json) as {
+      summary: { phase: string; eventCount: number; diagnostics: unknown };
+      events: unknown[];
+      snapshot: unknown;
+    };
+
+    expect(parsed.summary.phase).toBe("day_announcement");
+    expect(parsed.events.length).toBe(parsed.summary.eventCount);
+    expect(parsed.events.length).toBeGreaterThan(0);
+    expect(parsed.snapshot).not.toBeNull();
+    // driver 正常停在天亮播报 → 诊断为 idle（非异常）。
+    expect((parsed.summary.diagnostics as { reason: string }).reason).toBe("idle");
+  });
+
   it("recovers a persisted game in a fresh store on bootstrap", async () => {
     const db = freshDb();
     const first = createGameStore({ ai: new ScriptedAiClient(), db, now });

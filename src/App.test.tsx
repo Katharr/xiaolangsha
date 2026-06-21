@@ -39,7 +39,7 @@ async function renderApp() {
 
 /** 自由局选村民并揭示身份，driver 跑完 AI 夜晚后停在天亮播报。 */
 async function startFreeVillager(store: GameStore) {
-  await clickAndSettle(store, screen.getByText("练习 / 自由局"));
+  await clickAndSettle(store, screen.getByText(/进入自由局/));
   await clickAndSettle(store, await screen.findByText("村民"));
   await clickAndSettle(store, screen.getByText("确认身份"));
   await clickAndSettle(store, await screen.findByText("确认进入首夜"));

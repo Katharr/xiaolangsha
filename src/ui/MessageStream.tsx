@@ -1,43 +1,30 @@
 import { useEffect, useRef } from "react";
 
+import type { NightStepKind } from "../shared";
 import type { ChatMessage, ThinkingState } from "../store";
 
-import { TASK_THINKING_LABEL } from "./labels";
+import { Avatar } from "./Avatar";
+import { NIGHT_STEP_LABEL, TASK_THINKING_LABEL } from "./labels";
+import { PlayerName, bareName } from "./PlayerName";
 
 type MessageStreamProps = {
   messages: ChatMessage[];
   /** 当前正在思考的 AI；非空时在流底显示打字气泡。 */
   thinking?: ThinkingState | null;
+  /** 当前夜晚步骤的角色种类（主持人播报「等待 XX…」）；非夜晚为 null。 */
+  nightStepKind?: NightStepKind | null;
 };
-
-/** 玩家头像/名字标签的固定配色（按座位号取，整局稳定）。 */
-const SEAT_COLORS = [
-  "#5a7a5f",
-  "#b5651d",
-  "#3d6ea5",
-  "#8a5a9e",
-  "#c0392b",
-  "#2a9d8f",
-];
-
-function seatColor(seat: number | undefined): string {
-  if (!seat || seat < 1) {
-    return SEAT_COLORS[0];
-  }
-  return SEAT_COLORS[(seat - 1) % SEAT_COLORS.length];
-}
-
-function avatarChar(label: string | undefined): string {
-  // 取名字首字（label 形如「小林（3号）」）。
-  return label?.trim().charAt(0) || "?";
-}
 
 /**
  * 聊天室消息流：唯一可滚动区域。发言渲染成左右分栏气泡（自己靠右），
  * 带玩家色块头像 + 「名字（N号）」标签；主持人/投票/系统消息渲染为居中通知。
  * 所有文本按纯文本渲染（React 默认转义），不做 HTML 注入。
  */
-export function MessageStream({ messages, thinking }: MessageStreamProps) {
+export function MessageStream({
+  messages,
+  thinking,
+  nightStepKind,
+}: MessageStreamProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,7 +46,7 @@ export function MessageStream({ messages, thinking }: MessageStreamProps) {
         )
       )}
       {thinking ? (
-        <ThinkingBubble thinking={thinking} />
+        <ThinkingBubble thinking={thinking} nightStepKind={nightStepKind} />
       ) : null}
       <div ref={endRef} />
     </div>
@@ -67,23 +54,20 @@ export function MessageStream({ messages, thinking }: MessageStreamProps) {
 }
 
 function SpeechBubble({ message }: { message: ChatMessage }) {
-  const color = seatColor(message.speakerSeat);
+  const seat = message.speakerSeat ?? 0;
   return (
     <div
       className={`chat-row${message.self ? " chat-row-self" : ""}`}
       data-kind="speech"
     >
-      <span
-        className="chat-avatar"
-        style={{ background: color }}
-        aria-hidden="true"
-      >
-        {avatarChar(message.speakerLabel)}
-      </span>
+      <Avatar seat={seat} className="chat-avatar" />
       <div className="chat-bubble">
-        <span className="chat-name" style={{ color }}>
-          {message.speakerLabel}
-          {message.self ? "（你）" : ""}
+        <span className="chat-name">
+          <PlayerName
+            name={bareName(message.speakerLabel, message.speakerSeat)}
+            seat={seat}
+            isSelf={message.self}
+          />
         </span>
         <span className="chat-text">{message.text}</span>
       </div>
@@ -110,14 +94,23 @@ function NoticeRow({ message }: { message: ChatMessage }) {
   );
 }
 
-function ThinkingBubble({ thinking }: { thinking: ThinkingState }) {
-  // 夜晚匿名：只显示「天黑请闭眼」通用提示，不暴露行动者身份。
+function ThinkingBubble({
+  thinking,
+  nightStepKind,
+}: {
+  thinking: ThinkingState;
+  nightStepKind?: NightStepKind | null;
+}) {
+  // 夜晚匿名：只播报「当前在等哪个角色」，绝不暴露具体行动者身份（ISO-001）。
   if (thinking.anonymous) {
+    const waitingFor = nightStepKind ? NIGHT_STEP_LABEL[nightStepKind] : null;
     return (
       <div className="chat-notice chat-notice-host chat-notice-night" aria-label="夜晚行动中">
-        <span className="chat-notice-tag">夜晚</span>
+        <span className="chat-notice-tag">主持人</span>
         <span className="chat-notice-text">
-          天黑请闭眼，夜晚行动进行中
+          {waitingFor
+            ? `天黑请闭眼，正在等待${waitingFor}…`
+            : "天黑请闭眼，夜晚行动进行中"}
           <span className="chat-typing">
             <span className="dot" />
             <span className="dot" />
@@ -128,20 +121,14 @@ function ThinkingBubble({ thinking }: { thinking: ThinkingState }) {
     );
   }
 
-  const color = seatColor(thinking.seat);
   const task = TASK_THINKING_LABEL[thinking.taskType] ?? "行动";
+  const seat = thinking.seat ?? 0;
   return (
     <div className="chat-row chat-row-thinking" aria-label="AI 思考中">
-      <span
-        className="chat-avatar"
-        style={{ background: color }}
-        aria-hidden="true"
-      >
-        {avatarChar(thinking.name)}
-      </span>
+      <Avatar seat={seat} className="chat-avatar" />
       <div className="chat-bubble chat-bubble-thinking">
-        <span className="chat-name" style={{ color }}>
-          {thinking.name}（{thinking.seat}号）
+        <span className="chat-name">
+          <PlayerName name={thinking.name ?? "?"} seat={seat} />
         </span>
         <span className="chat-typing">
           正在{task}

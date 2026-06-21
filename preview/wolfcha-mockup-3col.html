@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 三列预览（私密信息面板 + 发言流 + 牌桌）</title>
+<style>
+  /* ===========================================================
+     三列方案：在已批准的方案 C 基础上，把「左侧过宽的发言流」收窄，
+     左边新增一列「私密信息面板」（按角色显示常驻私有信息）。
+       左 = 私密信息（身份卡 + 角色专属：预言家查验史 / 女巫药剂 / 狼队击杀 …）
+       中 = 发言流（主滚动） + 操作区
+       右 = 紧凑牌桌（中央舞台）+ 场上速览
+     纯静态预览，硬编码假数据，不接逻辑。所有私密数据均可从 vi.privateEvents/teammates 派生。
+     =========================================================== */
+  :root {
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:14px; --radius-sm:9px; --shadow:0 6px 22px rgba(0,0,0,.45); --t-fast:.18s; --t-mid:.35s;
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  body.is-day { --bg-0:#1c1810; --bg-1:#28221a; --bg-2:#322a20; --bg-3:#3b3226; --ink:#f4ecda; }
+  * { box-sizing:border-box; } html,body{ height:100%; margin:0; }
+  body{ background:radial-gradient(1400px 700px at 50% -15%, #2a2418 0%, transparent 60%), var(--bg-0);
+        color:var(--ink); font-family:var(--sans); overflow:hidden; }
+
+  .demo-bar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; height:39px; padding:0 14px;
+    background:#0d0b07; border-bottom:1px solid var(--line); font-size:13px; color:var(--ink-dim); }
+  .demo-bar strong{ color:var(--gold); font-weight:600; } .demo-bar .spacer{ flex:1; }
+  .demo-bar button{ font:inherit; cursor:pointer; padding:5px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg-3); color:var(--ink); }
+  .demo-bar button:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .demo-bar button.on{ background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; border-color:var(--gold-soft); }
+
+  /* ============ 外壳：左私密 | 中聊天 | 右牌桌；顶条跨三列，操作跨中列 ============ */
+  .frame{
+    height:calc(100vh - 39px); display:grid;
+    grid-template-columns: clamp(260px,21vw,330px) 1fr clamp(360px,30vw,500px);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "top  top  top"
+      "info chat side"
+      "info ctrl side";
+  }
+  .topbar{ grid-area:top; display:flex; align-items:center; gap:16px; padding:11px 22px;
+    border-bottom:1px solid var(--line); background:rgba(0,0,0,.25); }
+  .topbar .phase{ font-family:var(--serif); font-size:19px; letter-spacing:2px; color:var(--gold); }
+  .topbar .round{ color:var(--ink-dim); font-size:14px; }
+  .topbar .role{ margin-left:auto; font-size:14px; color:var(--ink-dim); } .topbar .role b{ color:var(--gold); }
+
+  /* ============ 左：私密信息面板 ============ */
+  .info{ grid-area:info; border-right:1px solid var(--line); background:rgba(0,0,0,.22);
+         display:flex; flex-direction:column; min-height:0; }
+  .info-head{ padding:11px 16px; border-bottom:1px solid var(--line); font-size:12.5px; color:var(--ink-faint); letter-spacing:1px; }
+  .info-head b{ color:var(--gold); font-weight:600; }
+  .info-body{ flex:1; overflow-y:auto; padding:14px 14px 18px; display:flex; flex-direction:column; gap:14px; }
+
+  /* 身份卡 */
+  .idcard{ display:flex; align-items:center; gap:11px; padding:11px; border-radius:var(--radius-sm);
+    background:var(--bg-2); border:1px solid var(--line); }
+  .idcard .id-av{ width:46px; height:46px; border-radius:50%; overflow:hidden; border:2px solid var(--gold); flex:0 0 auto; background:var(--bg-3); }
+  .idcard .id-av img{ width:100%; height:100%; display:block; }
+  .idcard .id-name{ font-size:14.5px; font-weight:600; }
+  .idcard .id-role{ font-size:12.5px; color:var(--ink-dim); margin-top:2px; }
+  .fac.good{ color:var(--good); } .fac.wolf{ color:var(--danger); }
+
+  /* 通用分节 */
+  .psec h4{ margin:2px 2px 9px; font-size:12.5px; font-weight:600; color:var(--ink-faint); letter-spacing:1px; }
+  .psec{ display:flex; flex-direction:column; gap:8px; }
+
+  /* 查验记录 */
+  .chk{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .chk .chk-night{ font-size:11px; color:var(--ink-faint); flex:0 0 auto; width:30px; }
+  .chk .chk-av{ width:28px; height:28px; border-radius:50%; overflow:hidden; border:1px solid var(--line); flex:0 0 auto; background:var(--bg-3); }
+  .chk .chk-av img{ width:100%; height:100%; display:block; }
+  .chk .chk-name{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge-good{ font-size:11px; padding:1px 8px; border-radius:10px; background:#1f3328; color:var(--good); border:1px solid #2c4a3a; }
+  .badge-wolf{ font-size:11px; padding:1px 8px; border-radius:10px; background:#3a1d18; color:#e9a99c; border:1px solid #5a2c26; }
+
+  /* 药剂状态 */
+  .potion{ display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); }
+  .potion .p-ic{ font-size:20px; flex:0 0 auto; } .potion.used{ opacity:.62; }
+  .potion .p-main{ flex:1; } .potion .p-main b{ font-size:13.5px; } .potion .p-sub{ font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
+  .p-tag{ font-size:11px; padding:1px 9px; border-radius:10px; flex:0 0 auto; }
+  .p-tag.ok{ background:#1f3328; color:var(--good); border:1px solid #2c4a3a; }
+  .p-tag.used{ background:var(--bg-3); color:var(--ink-faint); border:1px solid var(--line); }
+  .night-info{ font-size:12.5px; color:var(--ink-dim); padding:9px 10px; border-radius:8px; background:#2c2615; border:1px solid #4a3f1d; }
+  .night-info b{ color:#e7d29a; }
+
+  /* 守护 / 击杀记录 */
+  .logline{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .logline .ln-night{ font-size:11px; color:var(--ink-faint); flex:0 0 auto; width:30px; }
+  .logline .ln-main{ flex:1; }
+
+  /* 狼队成员行 */
+  .mate{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .mate .m-av{ width:28px; height:28px; border-radius:50%; overflow:hidden; border:1px solid var(--line); flex:0 0 auto; background:var(--bg-3); }
+  .mate .m-av img{ width:100%; height:100%; display:block; }
+  .mate .m-name{ flex:1; } .mate .m-st{ font-size:11px; color:var(--good); }
+
+  .empty-note{ font-size:13px; color:var(--ink-faint); line-height:1.7; padding:12px; border-radius:8px;
+    background:var(--bg-1); border:1px dashed var(--line); text-align:center; }
+
+  /* 私密 / 公开 的分隔 */
+  .pub-divider{ height:1px; background:var(--line); margin:2px 0; position:relative; }
+  .pub-divider span{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:var(--bg-1); padding:0 10px; font-size:11px; color:var(--ink-faint); letter-spacing:2px; }
+  body .info .pub-divider span{ background:#191510; }
+
+  /* 死亡公告行 */
+  .death-row{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .death-row .d-when{ font-size:11px; color:var(--ink-faint); flex:0 0 auto; width:34px; }
+  .death-row .d-av{ width:28px; height:28px; border-radius:50%; overflow:hidden; border:1px solid var(--line); flex:0 0 auto; background:var(--bg-3); filter:grayscale(1) brightness(.6); }
+  .death-row .d-av img{ width:100%; height:100%; display:block; }
+  .death-row .d-name{ flex:1; color:var(--ink-dim); }
+  .death-row .d-cause{ font-size:11px; padding:1px 8px; border-radius:10px; background:#2a1815; color:#e0a89c; border:1px solid #5a2c26; flex:0 0 auto; }
+
+  /* 投票记录：按「天」折叠的卡片，每张含该天所有轮次；每票一行。 */
+  .vote-day{ border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .vote-day + .vote-day{ margin-top:8px; }
+  .vd-head{ display:flex; align-items:center; gap:8px; padding:7px 11px; cursor:pointer; user-select:none;
+    background:#1d2530; color:#b9cbe2; font-size:12.5px; font-weight:600; }
+  .vd-head:hover{ background:#222d3b; }
+  .vd-arrow{ font-size:10px; color:var(--ink-faint); transition:transform var(--t-fast); flex:0 0 auto; }
+  .vote-day.open .vd-arrow{ transform:rotate(90deg); }
+  .vd-sum{ margin-left:auto; font-weight:400; font-size:11.5px; color:var(--ink-faint); }
+  .vd-body{ display:none; padding:4px 11px 9px; border-top:1px solid #2f3f55; }
+  .vote-day.open .vd-body{ display:block; }
+  .vr{ padding:7px 0 2px; }
+  .vr + .vr{ border-top:1px dashed var(--line); }
+  .vr-sub{ font-size:11px; color:var(--ink-faint); letter-spacing:1px; margin:2px 0 5px; }
+  .vline{ display:flex; align-items:center; gap:6px; font-size:12.5px; padding:2px 0; flex-wrap:wrap; }
+  .vline .varr{ color:var(--ink-faint); }
+  .vline .vabs{ color:var(--ink-faint); }
+  .vr-result{ margin-top:6px; font-size:12px; color:var(--gold); font-weight:600; }
+
+  /* ============ 中：发言流（主内容） ============ */
+  .chat{ grid-area:chat; display:flex; flex-direction:column; min-height:0; }
+  .chat-head{ padding:10px 22px; border-bottom:1px solid var(--line); font-size:13px; color:var(--ink-dim); }
+  .chat-head b{ color:var(--gold); font-weight:600; }
+  .stream{ flex:1; overflow-y:auto; padding:16px 22px; display:flex; flex-direction:column; gap:12px; }
+  .row{ display:flex; gap:10px; align-items:flex-start; max-width:82%; }
+  .row.self{ align-self:flex-end; flex-direction:row-reverse; }
+  .row .av{ flex:0 0 auto; width:36px; height:36px; border-radius:50%; overflow:hidden; border:1px solid var(--line); background:var(--bg-3); }
+  .row .av img{ width:100%; height:100%; display:block; }
+  .bubble{ background:var(--bg-2); border:1px solid var(--line); border-radius:12px; padding:8px 13px; line-height:1.55; }
+  .row.self .bubble{ background:#2f3a2a; border-color:#41502f; }
+  .bubble .who{ font-size:11.5px; font-weight:600; margin-bottom:1px; }
+  .bubble .tx{ font-size:14.5px; color:var(--ink); white-space:pre-wrap; }
+  .notice{ align-self:center; max-width:90%; display:flex; gap:8px; align-items:baseline; padding:6px 12px;
+    border-radius:10px; font-size:13px; line-height:1.5; background:var(--bg-2); border:1px solid var(--line); color:var(--ink-dim); }
+  .notice .ntag{ flex:0 0 auto; font-size:10.5px; font-weight:700; color:var(--ink-faint); }
+  .notice.host{ background:#20281f; border-color:#344029; }
+  .notice.vote{ background:#1d2530; border-color:#2f3f55; color:#b9cbe2; }
+  .typing{ display:inline-flex; gap:3px; align-items:center; font-style:italic; color:var(--ink-faint); font-size:13px; }
+  .typing .dot{ width:5px; height:5px; border-radius:50%; background:var(--gold-soft); animation:blink 1.2s infinite both; }
+  .typing .dot:nth-child(2){ animation-delay:.2s } .typing .dot:nth-child(3){ animation-delay:.4s }
+  @keyframes blink{ 0%,80%,100%{opacity:.2} 40%{opacity:1} }
+  ::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-thumb{ background:#3a3328; border-radius:8px; }
+
+  /* ============ 右：紧凑牌桌侧栏 ============ */
+  .side{ grid-area:side; border-left:1px solid var(--line); background:rgba(0,0,0,.18);
+         display:flex; flex-direction:column; min-height:0; }
+  .table-wrap{ position:relative; padding:18px 14px 10px; }
+  .table{ position:relative; width:min(100%,330px); aspect-ratio:1/1; margin:0 auto; }
+  .felt{ position:absolute; inset:5%; border-radius:50%;
+    background:radial-gradient(closest-side,#2b3a2f 0%,#223026 70%,#1b271e 100%);
+    border:1px solid #34433a; box-shadow:inset 0 0 60px rgba(0,0,0,.55), var(--shadow); }
+  body.is-day .felt{ background:radial-gradient(closest-side,#34442f 0%,#2a3826 70%,#232f20 100%); }
+  .stage{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:46%; max-width:210px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .stage .spk-av{ width:64px; height:64px; border-radius:50%; overflow:hidden; border:2px solid var(--gold);
+    box-shadow:0 0 0 3px rgba(216,178,90,.3), 0 0 18px rgba(216,178,90,.5); background:var(--bg-3); }
+  .stage .spk-av img{ width:100%; height:100%; display:block; }
+  .stage .spk-name{ font-size:13.5px; color:var(--gold); font-weight:600; }
+  .stage .spk-line{ font-size:12px; color:var(--ink-dim); line-height:1.5; max-height:4.5em; overflow:hidden; }
+  .seat{ position:absolute; transform:translate(-50%,-50%); width:84px;
+    display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center; }
+  .seat .avatar{ width:48px; height:48px; border-radius:50%; background:var(--bg-3); border:2px solid var(--line);
+    overflow:hidden; position:relative; box-shadow:0 2px 8px rgba(0,0,0,.4); }
+  .seat .avatar img{ width:100%; height:100%; display:block; }
+  .seat .nm{ font-size:11.5px; color:var(--ink); white-space:nowrap; }
+  .seat .nm .no{ color:var(--ink-faint); }
+  .seat .st{ font-size:10.5px; color:var(--ink-faint); }
+  .seat .badge{ position:absolute; top:-3px; right:-3px; font-size:9px; padding:0 4px; border-radius:7px; line-height:14px; border:1px solid var(--line); }
+  .seat .badge.you{ background:var(--gold); color:#2a210c; border-color:var(--gold); }
+  .seat .badge.wolf{ background:#4a2622; color:#e9a99c; border-color:#6a382f; }
+  .seat.speaking .avatar{ border-color:var(--gold); box-shadow:0 0 0 2px rgba(216,178,90,.4), 0 0 14px rgba(216,178,90,.5); transform:scale(1.07); }
+  .seat.speaking .st, .seat.speaking .nm{ color:var(--gold); }
+  .seat.dead .avatar{ filter:grayscale(1) brightness(.5); border-color:#2c2820; }
+  .seat.dead .avatar::after{ content:"✕"; position:absolute; inset:0; display:grid; place-items:center; color:rgba(220,90,70,.85); font-size:24px; font-weight:700; }
+  .seat.dead .nm{ color:var(--ink-faint); text-decoration:line-through; }
+  .roster{ flex:1; overflow-y:auto; padding:8px 14px 14px; border-top:1px solid var(--line); }
+  .roster h4{ margin:10px 2px 7px; font-size:12px; font-weight:600; color:var(--ink-faint); letter-spacing:1px; }
+  .rrow{ display:flex; align-items:center; gap:9px; padding:6px 7px; border-radius:8px; font-size:13px; }
+  .rrow .ra{ width:30px; height:30px; border-radius:50%; overflow:hidden; border:1px solid var(--line); flex:0 0 auto; background:var(--bg-3); }
+  .rrow .ra img{ width:100%; height:100%; display:block; }
+  .rrow .rn{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rrow .rn .no{ color:var(--ink-faint); }
+  .rrow .rs{ font-size:11px; color:var(--good); }
+  .rrow.dead .ra img{ filter:grayscale(1) brightness(.5); } .rrow.dead .rn{ color:var(--ink-faint); text-decoration:line-through; } .rrow.dead .rs{ color:#8a4036; }
+  .rrow .tagy{ font-size:9px; padding:0 4px; border-radius:6px; background:var(--gold); color:#2a210c; }
+  .rrow .tagw{ font-size:9px; padding:0 4px; border-radius:6px; background:#4a2622; color:#e9a99c; }
+
+  /* ============ 中列底部操作区 ============ */
+  .controls{ grid-area:ctrl; border-top:1px solid var(--line); background:rgba(0,0,0,.22); padding:14px 22px 18px;
+             display:flex; flex-direction:column; gap:10px; }
+  .controls .hint{ margin:0; font-size:14px; color:var(--ink-dim); }
+  .controls .ta{ width:100%; min-height:72px; max-height:150px; resize:vertical; padding:11px 13px; font:inherit; font-size:14.5px;
+    border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--bg-1); color:var(--ink); }
+  .controls .ta::placeholder{ color:var(--ink-faint); }
+  .controls .ta:focus{ outline:none; border-color:var(--gold-soft); box-shadow:0 0 0 2px rgba(216,178,90,.15); }
+  .ctl-foot{ display:flex; align-items:center; gap:10px; }
+  .ctl-foot .cc{ font-size:12.5px; color:var(--ink-faint); }
+  .ctl-foot .sp{ flex:1; }
+  .btn{ font:inherit; cursor:pointer; padding:9px 20px; border-radius:var(--radius-sm); border:1px solid var(--gold-soft);
+        color:#2a210c; font-weight:600; background:linear-gradient(180deg,#d8b25a,#b8954a); }
+  .btn:hover{ filter:brightness(1.05); }
+  .btn.ghost{ background:transparent; color:var(--ink-dim); border-color:var(--line); font-weight:500; }
+</style>
+</head>
+<body class="is-day">
+
+  <div class="demo-bar">
+    <strong>三列预览 · 私密信息面板</strong> · 切换角色看左栏：
+    <button class="role-btn on" data-role="seer">预言家</button>
+    <button class="role-btn" data-role="witch">女巫</button>
+    <button class="role-btn" data-role="wolf">狼人</button>
+    <button class="role-btn" data-role="villager">村民</button>
+    <span class="spacer"></span>
+    <button id="btn-day">切换 天黑/天亮</button>
+  </div>
+
+  <div class="frame">
+    <div class="topbar">
+      <span class="phase">白天 · 发言</span>
+      <span class="round">第 2 天</span>
+      <span class="role">你是：<b id="tb-role">预言家</b></span>
+    </div>
+
+    <!-- 左：私密信息面板 -->
+    <aside class="info">
+      <div class="info-head">🔒 <b>你的私密信息</b> · 仅你可见</div>
+      <div class="info-body" id="info-body"></div>
+    </aside>
+
+    <!-- 中：发言流 -->
+    <div class="chat">
+      <div class="chat-head">💬 发言流 · <b>第 2 天</b> · 存活 6 / 7</div>
+      <div class="stream">
+        <div class="notice host"><span class="ntag">主持人</span><span>天亮了。昨晚 <b style="color:var(--seat-4)">林夜<span style="color:var(--ink-faint);font-weight:400">（4号）</span></b> 夜里出局。</span></div>
+        <div class="row">
+          <span class="av"><img data-seed="qiao" /></span>
+          <div class="bubble"><div class="who" style="color:var(--seat-1)">乔木（1号）</div>
+            <div class="tx">昨晚 4 号出局了。我先说视角：昨天我注意到 5 号一直在带节奏，发言空，建议大家重点看他。</div></div>
+        </div>
+        <div class="row self">
+          <span class="av"><img data-seed="you" /></span>
+          <div class="bubble"><div class="who" style="color:var(--gold)">你（3号）</div>
+            <div class="tx">我是预言家，昨晚验了 5 号 —— 查杀。请大家相信我，今天票出 5 号。</div></div>
+        </div>
+        <div class="notice vote"><span class="ntag">投票</span><span>上一轮：<b style="color:var(--seat-6)">阿岚<span style="color:var(--ink-faint);font-weight:400">（6号）</span></b>→ <b style="color:var(--seat-5)">沈舟<span style="color:var(--ink-faint);font-weight:400">（5号）</span></b>，<b style="color:var(--seat-1)">乔木<span style="color:var(--ink-faint);font-weight:400">（1号）</span></b>→ <b style="color:var(--seat-5)">沈舟<span style="color:var(--ink-faint);font-weight:400">（5号）</span></b>，<b style="color:var(--seat-1)">白露<span style="color:var(--ink-faint);font-weight:400">（7号）</span></b> 弃票…</span></div>
+        <div class="row">
+          <span class="av"><img data-seed="bai" /></span>
+          <div class="bubble"><div class="who" style="color:var(--seat-1)">白露（7号）</div>
+            <div class="tx">我跟预言家。3 号给的信息很干净、节奏也对，今天就站 3 号验人，先出 5 号。</div></div>
+        </div>
+        <div class="row">
+          <span class="av"><img data-seed="man" /></span>
+          <div class="bubble"><div class="who" style="color:var(--seat-2)">小满（2号）</div>
+            <div class="typing">正在发言<span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：紧凑牌桌 + 速览 -->
+    <aside class="side">
+      <div class="table-wrap">
+        <div class="table" id="table">
+          <div class="felt"></div>
+          <div class="stage">
+            <div class="spk-av"><img data-seed="man" /></div>
+            <div class="spk-name">小满（2号）</div>
+            <div class="spk-line">正在发言…</div>
+          </div>
+        </div>
+      </div>
+      <div class="roster" id="roster"></div>
+    </aside>
+
+    <!-- 中列底部操作区 -->
+    <div class="controls">
+      <p class="hint">轮到你发言。组织你的发言，或先听别人说。</p>
+      <textarea class="ta" placeholder="输入你的发言…（预览仅展示样式）"></textarea>
+      <div class="ctl-foot">
+        <span class="cc">0 / 500</span>
+        <span class="sp"></span>
+        <button class="btn ghost">跳过</button>
+        <button class="btn">发送发言</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const AV = (seed) => `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
+  const av = (seed) => `<img src="${AV(seed)}" alt=""/>`;
+  document.querySelectorAll('img[data-seed]').forEach(i => i.src = AV(i.dataset.seed));
+
+  const SEATVAR=['--seat-1','--seat-2','--seat-3','--seat-4','--seat-5','--seat-6'];
+  // 名字着色统一规则：「你」=金色，其余按座位号取 6 色循环；座位号小字保持暗灰。
+  const colorOf=(seat,you)=> you?'var(--gold)':`var(${SEATVAR[(seat-1)%6]})`;
+  const NM=(name,seat,you)=>`<b style="color:${colorOf(seat,you)};font-weight:600">${name}<span style="color:var(--ink-faint);font-weight:400">（${seat}号）</span></b>`;
+
+  const PLAYERS=[
+    {seat:1,name:'乔木',seed:'qiao',state:'alive'},
+    {seat:2,name:'小满',seed:'man', state:'speaking'},
+    {seat:3,name:'你', seed:'you', state:'alive',you:true},
+    {seat:4,name:'林夜',seed:'lin', state:'dead'},
+    {seat:5,name:'沈舟',seed:'shen',state:'alive'},
+    {seat:6,name:'阿岚',seed:'lan', state:'alive'},
+    {seat:7,name:'白露',seed:'bai', state:'alive'},
+  ];
+  const table=document.getElementById('table'), roster=document.getElementById('roster');
+
+  function renderTable(wolfMode){
+    table.querySelectorAll('.seat').forEach(n=>n.remove());
+    const n=PLAYERS.length;
+    PLAYERS.forEach((p,i)=>{
+      const ang=(-90+i*360/n)*Math.PI/180, x=50+43*Math.cos(ang), y=50+44*Math.sin(ang);
+      const color=`var(${SEATVAR[(p.seat-1)%6]})`;
+      const el=document.createElement('div');
+      el.className='seat'+(p.state==='dead'?' dead':'')+(p.state==='speaking'?' speaking':'');
+      el.style.left=x+'%'; el.style.top=y+'%';
+      const badge=p.you?'<span class="badge you">你</span>':(wolfMode&&p.seat===5?'<span class="badge wolf">狼</span>':'');
+      el.innerHTML=`<div class="avatar">${av(p.seed)}${badge}</div>
+        <div class="nm" style="${p.state!=='dead'?`color:${colorOf(p.seat,p.you)};font-weight:600`:''}">${p.name}<span class="no">（${p.seat}）</span></div>
+        <div class="st">${p.state==='dead'?'出局':(p.state==='speaking'?'发言中':'存活')}</div>`;
+      table.appendChild(el);
+    });
+    const alive=PLAYERS.filter(p=>p.state!=='dead'), dead=PLAYERS.filter(p=>p.state==='dead');
+    const rrow=p=>`<div class="rrow ${p.state==='dead'?'dead':''}">${av(p.seed).replace('<img','<span class="ra"><img')+'</span>'}
+      <span class="rn" ${p.state!=='dead'?`style="color:${colorOf(p.seat,p.you)};font-weight:600"`:''}>${p.name}<span class="no">（${p.seat}号）</span></span>
+      ${p.you?'<span class="tagy">你</span>':(wolfMode&&p.seat===5?'<span class="tagw">狼</span>':'')}
+      <span class="rs">${p.state==='dead'?'出局':'存活'}</span></div>`;
+    roster.innerHTML=`<h4>场上速览 · 存活 ${alive.length}</h4>`+alive.map(rrow).join('')+
+      (dead.length?`<h4>出局 ${dead.length}</h4>`+dead.map(rrow).join(''):'');
+  }
+
+  const idcard=(role,fac)=>`<div class="idcard">
+    <span class="id-av">${av('you')}</span>
+    <div><div class="id-name">${NM('你',3,true)}</div>
+    <div class="id-role">${role} · <span class="fac ${fac==='好人阵营'?'good':'wolf'}">${fac}</span></div></div></div>`;
+
+  const PANELS={
+    seer: idcard('预言家','好人阵营')+`
+      <div class="psec"><h4>🔍 查验记录</h4>
+        <div class="chk"><span class="chk-night">第1夜</span><span class="chk-av">${av('lin')}</span><span class="chk-name">${NM('林夜',4)}</span><span class="badge-good">好人</span></div>
+        <div class="chk"><span class="chk-night">第2夜</span><span class="chk-av">${av('shen')}</span><span class="chk-name">${NM('沈舟',5)}</span><span class="badge-wolf">狼人</span></div>
+      </div>`,
+    witch: idcard('女巫','好人阵营')+`
+      <div class="psec"><h4>🧪 药剂状态</h4>
+        <div class="potion used"><span class="p-ic">💊</span><div class="p-main"><b>解药</b><div class="p-sub">第1夜 救了 ${NM('乔木',1)}</div></div><span class="p-tag used">已用</span></div>
+        <div class="potion"><span class="p-ic">☠️</span><div class="p-main"><b>毒药</b><div class="p-sub">尚未使用</div></div><span class="p-tag ok">可用</span></div>
+      </div>
+      <div class="psec"><h4>🌙 夜间情报</h4>
+        <div class="night-info">第1夜：今晚倒牌的是 ${NM('乔木',1)}（你已用解药救回）</div>
+        <div class="night-info">第2夜：今晚倒牌的是 ${NM('林夜',4)}</div>
+      </div>`,
+    wolf: idcard('狼人','狼人阵营')+`
+      <div class="psec"><h4>🐺 狼队（含你共 2 人）</h4>
+        <div class="mate"><span class="m-av">${av('shen')}</span><span class="m-name">${NM('沈舟',5)}</span><span class="m-st">存活</span></div>
+      </div>
+      <div class="psec"><h4>🔪 击杀记录</h4>
+        <div class="logline"><span class="ln-night">第1夜</span><span class="ln-main">目标 ${NM('乔木',1)}</span><span class="badge-wolf">被救</span></div>
+        <div class="logline"><span class="ln-night">第2夜</span><span class="ln-main">目标 ${NM('林夜',4)}</span><span class="badge-good" style="background:#3a1d18;color:#e9a99c;border-color:#5a2c26">得手</span></div>
+      </div>`,
+    villager: idcard('村民','好人阵营')+`
+      <div class="empty-note">你是普通村民，没有夜间能力。<br/>靠白天的发言与推理找出狼人吧。</div>`,
+  };
+  const ROLE_NAME={seer:'预言家',witch:'女巫',wolf:'狼人',villager:'村民'};
+
+  // 公开信息（所有身份相同）：死亡公告 + 按轮收拢的票型。源自 vi.deadPlayers / vi.votes。
+  const PUBLIC=`
+    <div class="pub-divider"><span>公 开 信 息</span></div>
+    <div class="psec"><h4>💀 死亡公告</h4>
+      <div class="death-row"><span class="d-when">第1夜</span><span class="d-av">${av('lin')}</span><span class="d-name">${NM('林夜',4)}</span><span class="d-cause">夜里出局</span></div>
+    </div>
+    <div class="psec"><h4>🗳️ 投票记录</h4>
+      <div class="vote-day open">
+        <div class="vd-head" onclick="this.parentElement.classList.toggle('open')">
+          <span class="vd-arrow">▸</span><span>第 2 天</span><span class="vd-sum">放逐 ${NM('阿岚',6)}</span></div>
+        <div class="vd-body">
+          <div class="vr"><div class="vr-sub">首轮</div>
+            <div class="vline">${NM('乔木',1)}<span class="varr">→</span>${NM('阿岚',6)}</div>
+            <div class="vline">${NM('你',3,true)}<span class="varr">→</span>${NM('阿岚',6)}</div>
+            <div class="vline">${NM('小满',2)}<span class="varr">→</span>${NM('阿岚',6)}</div>
+            <div class="vline">${NM('阿岚',6)}<span class="varr">→</span>${NM('小满',2)}</div>
+            <div class="vline">${NM('白露',7)}<span class="vabs">弃票</span></div>
+            <div class="vr-result">${NM('阿岚',6)} 被放逐（3 票）</div>
+          </div>
+        </div>
+      </div>
+      <div class="vote-day">
+        <div class="vd-head" onclick="this.parentElement.classList.toggle('open')">
+          <span class="vd-arrow">▸</span><span>第 1 天</span><span class="vd-sum">放逐 ${NM('沈舟',5)}</span></div>
+        <div class="vd-body">
+          <div class="vr"><div class="vr-sub">首轮</div>
+            <div class="vline">${NM('乔木',1)}<span class="varr">→</span>${NM('沈舟',5)}</div>
+            <div class="vline">${NM('你',3,true)}<span class="varr">→</span>${NM('沈舟',5)}</div>
+            <div class="vline">${NM('沈舟',5)}<span class="varr">→</span>${NM('阿岚',6)}</div>
+            <div class="vline">${NM('小满',2)}<span class="varr">→</span>${NM('阿岚',6)}</div>
+            <div class="vline">${NM('阿岚',6)}<span class="vabs">弃票</span></div>
+            <div class="vline">${NM('白露',7)}<span class="vabs">弃票</span></div>
+            <div class="vr-result">平票（沈舟 2 / 阿岚 2）→ 进入加赛</div>
+          </div>
+          <div class="vr"><div class="vr-sub">加赛</div>
+            <div class="vline">${NM('乔木',1)}<span class="varr">→</span>${NM('沈舟',5)}</div>
+            <div class="vline">${NM('你',3,true)}<span class="varr">→</span>${NM('沈舟',5)}</div>
+            <div class="vline">${NM('白露',7)}<span class="varr">→</span>${NM('沈舟',5)}</div>
+            <div class="vline">${NM('阿岚',6)}<span class="vabs">弃票</span></div>
+            <div class="vr-result">${NM('沈舟',5)} 被放逐（3 票）</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  function setRole(role){
+    document.getElementById('info-body').innerHTML=PANELS[role]+PUBLIC;
+    document.getElementById('tb-role').textContent=ROLE_NAME[role];
+    document.querySelectorAll('.role-btn').forEach(b=>b.classList.toggle('on',b.dataset.role===role));
+    renderTable(role==='wolf');
+  }
+  document.querySelectorAll('.role-btn').forEach(b=>b.addEventListener('click',()=>setRole(b.dataset.role)));
+  document.getElementById('btn-day').addEventListener('click',()=>document.body.classList.toggle('is-day'));
+  setRole('seer');
+</script>
+</body>
+</html>

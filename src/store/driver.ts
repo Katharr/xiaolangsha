@@ -2,6 +2,7 @@ import type { AiClient, AiTaskPayload, AiTaskRequest } from "../ai-client";
 import { applyAction, buildVisibleInformation } from "../rules";
 import type {
   ActiveVoteRound,
+  AppError,
   GameAction,
   GameSession,
   GameSnapshot,
@@ -37,6 +38,35 @@ export type DriverState = {
 export type DriverStep =
   | { kind: "ai"; actorId: string; taskType: InGameTaskType }
   | { kind: "auto_confirm_day"; playerId: string };
+
+/**
+ * 自动轮转循环停下的原因（诊断用，进调试日志 / 触发提示）：
+ * - `idle`：正常停在某相位等真人操作（不是 bug）。
+ * - `completed`：对局已结束。
+ * - `ai_error`/`invalid_payload`/`rule_rejected`/`max_steps`：异常停止，流程没法自动往下走，
+ *   这正是「卡住、没动静」的根因，应提示用户导出日志。
+ */
+export type DriverHalt =
+  | { reason: "idle"; phase: GameSnapshot["gamePhase"] }
+  | { reason: "completed" }
+  | {
+      reason: "ai_error";
+      actorId: string;
+      taskType: InGameTaskType;
+      error: AppError;
+    }
+  | { reason: "invalid_payload"; actorId: string; taskType: InGameTaskType }
+  | { reason: "rule_rejected"; action: GameAction; error: AppError }
+  | { reason: "max_steps" };
+
+/** halt.reason 是否属于「异常卡住」（需要提示用户 / 值得排查）。 */
+export function isAbnormalHalt(halt: DriverHalt | null): boolean {
+  return (
+    halt !== null &&
+    halt.reason !== "idle" &&
+    halt.reason !== "completed"
+  );
+}
 
 /**
  * 根据当前快照决定 driver 下一步要替谁出手；返回 null 表示该停（轮到真人、
@@ -295,6 +325,8 @@ export type DriverOptions = {
     actorId: string;
     taskType: InGameTaskType;
   }) => void;
+  /** 循环结束时回报停下的原因（诊断用：正常等真人 / 还是异常卡住）。 */
+  onHalt?: (halt: DriverHalt) => void;
   /** 防御性步数上限，避免规则/AI 异常造成死循环。 */
   maxSteps?: number;
 };
@@ -309,10 +341,16 @@ export async function runAiDriver(
 ): Promise<DriverState> {
   const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
   let state = initial;
+  // 默认假设跑满步数上限；任一 break 都会把它改写成真实原因。
+  let halt: DriverHalt = { reason: "max_steps" };
 
   for (let stepCount = 0; stepCount < maxSteps; stepCount += 1) {
     const step = nextDriverStep(state, options.humanPlayerId);
     if (!step) {
+      halt =
+        state.session.status === "ended"
+          ? { reason: "completed" }
+          : { reason: "idle", phase: state.snapshot.gamePhase };
       break;
     }
 
@@ -345,6 +383,12 @@ export async function runAiDriver(
       const response = await options.ai.respond(request);
       if (!response.ok) {
         // withFallback 应保证有兜底；万一仍失败，停下避免死循环。
+        halt = {
+          reason: "ai_error",
+          actorId: step.actorId,
+          taskType: step.taskType,
+          error: response.error,
+        };
         break;
       }
       action = payloadToAction({
@@ -356,6 +400,14 @@ export async function runAiDriver(
     }
 
     if (!action) {
+      halt =
+        step.kind === "ai"
+          ? {
+              reason: "invalid_payload",
+              actorId: step.actorId,
+              taskType: step.taskType,
+            }
+          : { reason: "idle", phase: state.snapshot.gamePhase };
       break;
     }
 
@@ -366,6 +418,7 @@ export async function runAiDriver(
       now,
     });
     if (!result.ok) {
+      halt = { reason: "rule_rejected", action, error: result.error };
       break;
     }
 
@@ -378,6 +431,7 @@ export async function runAiDriver(
     await options.onStep?.(state);
   }
 
+  options.onHalt?.(halt);
   return state;
 }
 

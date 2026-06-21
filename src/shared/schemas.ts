@@ -365,6 +365,13 @@ export const visibleInformationSnapshotSchema = z.object({
   votes: z.array(visibleVoteSchema),
   legalActions: z.array(legalActionSchema),
   canAct: z.boolean(),
+  nightStatus: z
+    .object({
+      currentStepKind: nightStepSchema.shape.kind,
+      waitingForViewer: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const ruleEngineResultSchema = resultSchema(

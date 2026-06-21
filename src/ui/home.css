@@ -1,0 +1,742 @@
+/* ============================================================
+   主页 / 开场屏样式（HomeScreen，mode_select 相位）。
+   从 preview/home-mockup-v2.html 落地，全部选择器以 .home-screen 作用域隔离，
+   复用 theme.css 的 design token；仅本屏新增 --silver。
+   ============================================================ */
+.home-screen {
+  --silver: #a9b6d4;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+/* ---------- 背景动效层 ---------- */
+/* 1) 漂移极光光晕 */
+.home-screen .hs-aurora {
+  position: absolute;
+  inset: -25%;
+  z-index: 0;
+  filter: blur(70px);
+  pointer-events: none;
+}
+.home-screen .hs-aurora b {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+.home-screen .hs-aurora .b1 {
+  width: 46vw;
+  height: 46vw;
+  left: 8%;
+  top: -6%;
+  background: radial-gradient(circle, rgba(216, 178, 90, 0.55), transparent 62%);
+  animation: hs-drift1 26s ease-in-out infinite alternate;
+}
+.home-screen .hs-aurora .b2 {
+  width: 50vw;
+  height: 50vw;
+  right: 2%;
+  top: 18%;
+  background: radial-gradient(circle, rgba(91, 145, 201, 0.45), transparent 64%);
+  animation: hs-drift2 32s ease-in-out infinite alternate;
+}
+.home-screen .hs-aurora .b3 {
+  width: 42vw;
+  height: 42vw;
+  left: 26%;
+  bottom: -14%;
+  background: radial-gradient(circle, rgba(192, 86, 63, 0.34), transparent 62%);
+  animation: hs-drift3 30s ease-in-out infinite alternate;
+}
+@keyframes hs-drift1 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(7%, 5%) scale(1.12);
+  }
+}
+@keyframes hs-drift2 {
+  from {
+    transform: translate(0, 0) scale(1.05);
+  }
+  to {
+    transform: translate(-8%, -4%) scale(0.92);
+  }
+}
+@keyframes hs-drift3 {
+  from {
+    transform: translate(0, 0) scale(0.95);
+  }
+  to {
+    transform: translate(5%, -6%) scale(1.15);
+  }
+}
+
+/* 2) 顶部微光 + 底部冷光 + 暗角 */
+.home-screen .hs-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(1300px 720px at 50% -14%, rgba(54, 46, 28, 0.7) 0%, transparent 56%),
+    radial-gradient(900px 620px at 50% 122%, rgba(34, 44, 62, 0.6) 0%, transparent 54%),
+    radial-gradient(120% 120% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* 3) 星空 */
+.home-screen .hs-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.home-screen .hs-stars i {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #f2ecda;
+  opacity: 0.5;
+  animation: hs-twinkle var(--dur, 4s) ease-in-out var(--del, 0s) infinite;
+}
+@keyframes hs-twinkle {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* 4) 上浮余烬 / 萤火 */
+.home-screen .hs-embers {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.home-screen .hs-embers i {
+  position: absolute;
+  bottom: -12px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #f3d488, rgba(216, 178, 90, 0.2) 60%, transparent 70%);
+  box-shadow: 0 0 8px rgba(216, 178, 90, 0.7);
+  opacity: 0;
+  animation: hs-rise-up var(--dur, 14s) linear var(--del, 0s) infinite;
+}
+@keyframes hs-rise-up {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-52vh) translateX(var(--sway, 16px));
+  }
+  90% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translateY(-104vh) translateX(0);
+    opacity: 0;
+  }
+}
+
+/* ---------- 主舞台 ---------- */
+.home-screen .hs-home {
+  position: relative;
+  z-index: 3;
+  width: min(94vw, 1000px);
+  padding: 24px;
+  text-align: center;
+  animation: hs-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes hs-rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 自转环形牌桌剪影 */
+.home-screen .hs-ring {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  width: min(82vw, 620px);
+  aspect-ratio: 1;
+  pointer-events: none;
+  animation: hs-spin 120s linear infinite;
+}
+@keyframes hs-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.home-screen .hs-ring .r {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed rgba(216, 178, 90, 0.13);
+}
+.home-screen .hs-ring .r::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.home-screen .hs-ring i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.home-screen .hs-hero {
+  position: relative;
+  z-index: 1;
+}
+
+/* 月亮徽标（呼吸光晕） */
+.home-screen .hs-moon {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  margin: 0 auto 24px;
+  position: relative;
+  background: radial-gradient(circle at 36% 30%, #eef2fa, #aeb8d0 54%, #6b7691);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), inset -11px -13px 24px rgba(38, 46, 68, 0.6);
+  animation: hs-moonglow 6s ease-in-out infinite;
+}
+@keyframes hs-moonglow {
+  0%,
+  100% {
+    box-shadow: 0 0 36px rgba(150, 170, 220, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset -11px -13px 24px rgba(38, 46, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 60px rgba(160, 180, 230, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.16),
+      inset -11px -13px 24px rgba(38, 46, 68, 0.6);
+  }
+}
+.home-screen .hs-moon::after {
+  content: "";
+  position: absolute;
+  left: 58%;
+  top: 30%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(88, 98, 128, 0.32);
+  box-shadow: -22px 16px 0 -4px rgba(88, 98, 128, 0.26), -6px 30px 0 -3px rgba(88, 98, 128, 0.2);
+}
+
+.home-screen .hs-title {
+  font-family: var(--serif);
+  font-size: clamp(50px, 8.5vw, 92px);
+  letter-spacing: 0.24em;
+  margin: 0 0 4px;
+  line-height: 1.05;
+  background: linear-gradient(
+    100deg,
+    #b8954a 0%,
+    #f2dca0 30%,
+    #d8b25a 50%,
+    #f4e3b4 70%,
+    #b8954a 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 2px 30px rgba(216, 178, 90, 0.22);
+  animation: hs-shimmer 7s linear infinite;
+}
+@keyframes hs-shimmer {
+  to {
+    background-position: 220% 0;
+  }
+}
+.home-screen .hs-subtitle {
+  font-size: 0.92rem;
+  letter-spacing: 0.5em;
+  color: var(--ink-faint);
+  margin: 0 0 8px;
+}
+.home-screen .hs-tagline {
+  font-size: 1.04rem;
+  color: var(--ink-dim);
+  margin: 0 auto 42px;
+  max-width: 32em;
+  line-height: 1.75;
+}
+.home-screen .hs-tagline b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- 模式卡片 ---------- */
+.home-screen .hs-modes {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.home-screen .hs-mode {
+  position: relative;
+  width: 348px;
+  text-align: left;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(48, 42, 33, 0.92), rgba(26, 22, 17, 0.95));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  padding: 26px 26px 24px;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.25s ease;
+}
+/* 渐变描边 */
+.home-screen .hs-mode::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(150deg, rgba(216, 178, 90, 0.55), rgba(216, 178, 90, 0.06) 42%, transparent 72%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* hover 掠光 */
+.home-screen .hs-mode::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.07) 48%, transparent 62%);
+  transform: translateX(-130%);
+  transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.home-screen .hs-mode:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55), 0 0 30px rgba(216, 178, 90, 0.12);
+}
+.home-screen .hs-mode:hover::after {
+  transform: translateX(130%);
+}
+.home-screen .hs-mode.free::before {
+  background: linear-gradient(150deg, rgba(169, 182, 212, 0.5), rgba(169, 182, 212, 0.05) 42%, transparent 72%);
+}
+
+.home-screen .hs-watermark {
+  position: absolute;
+  right: -14px;
+  bottom: -18px;
+  font-size: 8rem;
+  line-height: 1;
+  opacity: 0.05;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+
+.home-screen .hs-ribbon {
+  position: absolute;
+  top: 16px;
+  right: -34px;
+  transform: rotate(45deg);
+  z-index: 2;
+  background: linear-gradient(180deg, #d8b25a, #b8954a);
+  color: #2a210c;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 4px 40px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.home-screen .hs-medallion {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 2.1rem;
+  background: radial-gradient(circle at 36% 30%, #3c321b, #201b13);
+  border: 1px solid rgba(216, 178, 90, 0.42);
+  box-shadow: inset 0 0 20px rgba(216, 178, 90, 0.16), 0 0 0 6px rgba(216, 178, 90, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+.home-screen .hs-mode.free .hs-medallion {
+  background: radial-gradient(circle at 36% 30%, #232a3a, #14161f);
+  border-color: rgba(169, 182, 212, 0.42);
+  box-shadow: inset 0 0 20px rgba(169, 182, 212, 0.16), 0 0 0 6px rgba(169, 182, 212, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.home-screen .hs-mtitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+.home-screen .hs-mtitle h3 {
+  font-family: var(--serif);
+  font-size: 1.55rem;
+  margin: 0;
+  color: var(--ink);
+  letter-spacing: 0.06em;
+}
+.home-screen .hs-pill {
+  font-size: 0.72rem;
+  color: var(--gold);
+  border: 1px solid var(--gold-soft);
+  padding: 2px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.home-screen .hs-mode.free .hs-pill {
+  color: var(--silver);
+  border-color: rgba(169, 182, 212, 0.45);
+}
+
+.home-screen .hs-desc {
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+  line-height: 1.7;
+  margin: 12px 0 18px;
+  min-height: 3.4em;
+  position: relative;
+  z-index: 1;
+}
+
+.home-screen .hs-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+  min-height: 28px;
+  position: relative;
+  z-index: 1;
+}
+.home-screen .hs-chip {
+  font-size: 0.77rem;
+  color: var(--ink-dim);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.home-screen .hs-chip b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.home-screen .hs-cta {
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
+  margin-top: auto;
+  padding: 13px 22px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--gold-soft);
+  color: #2a210c;
+  background: linear-gradient(180deg, #e3c069, #b8954a);
+  transition: filter 0.15s ease, gap 0.2s ease;
+  box-shadow: 0 4px 14px rgba(216, 178, 90, 0.2);
+}
+.home-screen .hs-cta:hover:not(:disabled) {
+  filter: brightness(1.08);
+  gap: 16px;
+}
+.home-screen .hs-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.home-screen .hs-cta .arr {
+  transition: transform 0.2s ease;
+}
+.home-screen .hs-cta:hover:not(:disabled) .arr {
+  transform: translateX(4px);
+}
+.home-screen .hs-mode.free .hs-cta {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: none;
+}
+.home-screen .hs-mode.free .hs-cta:hover:not(:disabled) {
+  color: var(--silver);
+  border-color: rgba(169, 182, 212, 0.55);
+}
+
+.home-screen .hs-footnote {
+  margin-top: 38px;
+  font-size: 0.79rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.05em;
+  position: relative;
+  z-index: 1;
+}
+.home-screen .hs-footnote span {
+  color: var(--gold-soft);
+}
+
+/* ============================================================
+   选身份页（RoleSelectScreen，role_setup 相位）。复用上面的 .home-screen 背景层
+   与 .hs-* 视觉语言，仅新增 .rs-* 卡片/确认条样式。落地自 preview/role-select-mockup.html。
+   ============================================================ */
+/* 标题/副标比主页小一档，给下方角色网格让位。 */
+.home-screen.role-select .rs-title {
+  font-size: clamp(34px, 5.4vw, 58px);
+  letter-spacing: 0.16em;
+}
+.home-screen.role-select .rs-eyebrow {
+  letter-spacing: 0.5em;
+  margin: 0 0 10px;
+  padding-left: 0.5em;
+}
+.home-screen.role-select .rs-lede {
+  font-size: 1rem;
+  margin: 0 auto 30px;
+  max-width: 34em;
+  text-wrap: balance;
+}
+.home-screen.role-select .rs-lede b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* 角色卡网格：flex 居中换行，每排都居中、卡片等宽（折行变 3+2 而非 4+1 拖尾）。 */
+.home-screen .rs-roles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.home-screen .rs-role {
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  flex: 1 1 165px;
+  max-width: 200px;
+  border: none;
+  border-radius: var(--radius);
+  padding: 20px 18px 18px;
+  background: linear-gradient(180deg, rgba(48, 42, 33, 0.92), rgba(26, 22, 17, 0.95));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--ink);
+  font: inherit;
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.22s ease;
+}
+/* 渐变描边（默认中性银，选中转金）。 */
+.home-screen .rs-role::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(150deg, rgba(169, 182, 212, 0.4), rgba(169, 182, 212, 0.05) 42%, transparent 72%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: background 0.22s ease;
+}
+.home-screen .rs-role:hover:not(:disabled) {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 26px rgba(216, 178, 90, 0.1);
+  filter: none;
+}
+.home-screen .rs-role:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.home-screen .rs-role.sel {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55), 0 0 30px rgba(216, 178, 90, 0.22);
+}
+.home-screen .rs-role.sel::before {
+  background: linear-gradient(150deg, rgba(216, 178, 90, 0.85), rgba(216, 178, 90, 0.12) 45%, transparent 72%);
+}
+
+.home-screen .rs-check {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  color: #2a210c;
+  font-weight: 800;
+  background: var(--gold);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: 0.2s;
+}
+.home-screen .rs-role.sel .rs-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.home-screen .rs-medal {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.8rem;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
+  background: radial-gradient(circle at 36% 30%, #3c321b, #201b13);
+  border: 1px solid rgba(216, 178, 90, 0.42);
+  box-shadow: inset 0 0 18px rgba(216, 178, 90, 0.16), 0 0 0 5px rgba(216, 178, 90, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.home-screen .rs-role.wolf .rs-medal {
+  background: radial-gradient(circle at 36% 30%, #3a1f1a, #1c1311);
+  border-color: rgba(192, 86, 63, 0.5);
+  box-shadow: inset 0 0 18px rgba(192, 86, 63, 0.18), 0 0 0 5px rgba(192, 86, 63, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.home-screen .rs-role h3 {
+  font-family: var(--serif);
+  font-size: 1.32rem;
+  margin: 0;
+  color: var(--ink);
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+  position: relative;
+  z-index: 1;
+}
+/* 角色名整体不拆字：放不下时让阵营徽标整块换行，而非把「预言家」拆成 2+1。 */
+.home-screen .rs-role h3 .rname {
+  white-space: nowrap;
+}
+.home-screen .rs-fac {
+  font-size: 0.68rem;
+  padding: 1px 9px;
+  border-radius: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.home-screen .rs-fac.good {
+  color: var(--good);
+  border: 1px solid #2c4a3a;
+  background: #1f3328;
+}
+.home-screen .rs-fac.wolf {
+  color: #e9a99c;
+  border: 1px solid #5a2c26;
+  background: #3a1d18;
+}
+.home-screen .rs-role p {
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  line-height: 1.65;
+  margin: 10px 0 0;
+  position: relative;
+  z-index: 1;
+  text-wrap: pretty;
+}
+
+/* 底部确认条 */
+.home-screen .rs-confirm {
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.home-screen .rs-picked {
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+}
+.home-screen .rs-picked b {
+  color: var(--gold);
+  font-weight: 700;
+}
+/* 复用 .hs-cta 的金色主样式，只调宽度（不再整宽铺满）。 */
+.home-screen .rs-cta {
+  width: auto;
+  margin-top: 0;
+  padding: 13px 40px;
+}
+.home-screen .rs-foot {
+  margin-top: 26px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-screen .hs-aurora b,
+  .home-screen .hs-stars i,
+  .home-screen .hs-embers i,
+  .home-screen .hs-ring,
+  .home-screen .hs-moon,
+  .home-screen .hs-title,
+  .home-screen .hs-home {
+    animation: none !important;
+  }
+}
+@media (max-width: 600px) {
+  .home-screen .hs-ring,
+  .home-screen .hs-embers {
+    display: none;
+  }
+  .home-screen .hs-mode {
+    width: 100%;
+  }
+}

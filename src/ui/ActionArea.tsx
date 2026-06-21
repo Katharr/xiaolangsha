@@ -9,7 +9,7 @@ import type {
   VisibleInformationSnapshot,
 } from "../shared";
 
-import { ROLE_LABEL } from "./labels";
+import { NIGHT_STEP_LABEL, ROLE_LABEL } from "./labels";
 
 /** 女巫从自己的私有 witch_wake 事件里读出今晚被刀者与解药/毒药剩余。 */
 type WitchWake = {
@@ -245,7 +245,15 @@ export function ActionArea({
     case "night_action": {
       const action = vi?.legalActions[0];
       if (!action || !vi?.canAct) {
-        return wrap(<p className="action-hint">天黑请闭眼，等待夜晚行动结算…</p>);
+        const stepKind = vi?.nightStatus?.currentStepKind;
+        const waitingFor = stepKind ? NIGHT_STEP_LABEL[stepKind] : null;
+        return wrap(
+          <p className="action-hint">
+            {waitingFor
+              ? `天黑请闭眼，主持人正在等待${waitingFor}…`
+              : "天黑请闭眼，等待夜晚行动结算…"}
+          </p>,
+        );
       }
 
       // 女巫：读 witch_wake 私有事件得知被刀者，三选一（救 X / 毒谁 / 放弃）。
