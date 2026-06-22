@@ -91,6 +91,12 @@ export type GameStoreState = {
    * 含完整真相（AI 身份、夜晚密谋、查验结果），仅供离线 debug，不在 UI 内展示；比全量 JSON 小一个量级。
    */
   exportDebugLog: () => string;
+  /**
+   * 中途弃局：任何相位都可用的「直接结束本局、返回主界面重新选模式」。
+   * 丢弃当前对局、清存档、自增代数作废仍在跑的 AI 驱动，重置回 mode_select 空态。
+   * 与 confirm_new_game（复盘后正常开新局、会写 TruthEvent）不同——这是放弃，不记账。
+   */
+  abandonGame: () => Promise<void>;
 };
 
 export type GameStore = StoreApi<GameStoreState>;
@@ -343,6 +349,27 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
           events: s.events,
           diagnostics: s.diagnostics,
           lastError: s.lastError,
+        });
+      },
+
+      abandonGame: async (): Promise<void> => {
+        // 自增代数：作废任何仍在 await LLM 的旧驱动，令其不再回写已重置的状态
+        //（与旁观重开复用同一并发安全机制，见 dispatch/drive 的 generation 注释）。
+        generation += 1;
+        await clearCurrentGame(db);
+        set({
+          session: null,
+          snapshot: null,
+          events: [],
+          visibleInformation: null,
+          messages: [],
+          busy: false,
+          thinking: null,
+          lastError: null,
+          phase: "mode_select",
+          participation: null,
+          reviewContext: null,
+          diagnostics: null,
         });
       },
     };

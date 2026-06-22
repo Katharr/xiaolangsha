@@ -27,6 +27,12 @@ describe("L2 世界模型 worldModel()", () => {
     expect(worldModel()).toContain("没有警长 / 警徽");
   });
 
+  it("硬信息源拓宽到猎人/女巫，别冤推给信息的好人（治集体冤好人）", () => {
+    const text = worldModel();
+    expect(text).toContain("猎人");
+    expect(text).toContain("给信息的好人");
+  });
+
   it("不出现身份断言子串", () => {
     expect(worldModel()).not.toMatch(/狼人是|预言家是/);
   });

@@ -84,6 +84,14 @@ export interface NameCharacter {
   playMind: string;
   /** 拿狼牌时的伪装风格（仅狼身份渲染）。 */
   wolfDeception: string;
+  /**
+   * 说话习惯：发言**怎么说出来**——长短 / 抢不抢话 / 用词与口头禅 / 语气。
+   * 对齐 wolfcha 的 `speechLengthHabit`+`tablePresence`+`vocabularyStyle`，专治「每条都四五句、
+   * 端着报告腔、全桌雷同」。**只在发言类任务（speech/tie_speech/last_words）渲染**（见
+   * `prompt/character.ts`），投票/夜晚等逻辑步不渲染（省体积、那些步本就该逻辑优先）。
+   * 红线同上：只描述「怎么说话」，阵营中立、不含身份真相。
+   */
+  speechHabit: string;
 }
 
 export const NAME_CHARACTERS: Record<string, NameCharacter> = {
@@ -93,6 +101,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子中等，不轻易冲票；得把线索串成一条链才肯站边，单点说法说服不了他；逻辑抠得细，但有时太较真、反而错过临场那种直觉信号",
     wolfDeception:
       "拿到狼牌也是一副慢条斯理对账的样子，用看似严谨的分析把水搅浑，很少高调跳出来",
+    speechHabit: "说话惜字，三两句点到为止，用词朴实不堆术语，不爱长篇也不抢话",
   },
   阿杰: {
     profession: "干工程监理的，整天盯进度赶工期，最受不了拖泥带水",
@@ -100,6 +109,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子大、敢冲敢诈，早早锁定一个怀疑对象就主动归票；怀疑阈值低，宁可推错也不愿干等；容易过早咬死一个人，被带偏了也不肯回头",
     wolfDeception:
       "拿狼牌就用催进度的急脾气带节奏，咬住一个好人硬说是狼，把场子搅得快快出人",
+    speechHabit: "短句、节奏快，常一句撂下态度就完，爱催别人「快点说重点」「别墨迹」",
   },
   花花: {
     profession: "开了家奶茶店，天天跟客人插科打诨，嘴皮子利索",
@@ -107,6 +117,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子不小，关键判断却不含糊；信临场那种「感觉不对劲」，不爱在细枝末节里纠缠；偶尔凭感觉冒进、说不出硬依据",
     wolfDeception:
       "拿狼牌继续嘻嘻哈哈活跃气氛，用一句玩笑把怀疑轻轻带过去，让人觉得她人畜无害",
+    speechHabit: "爱插科打诨，话里常带玩笑和语气词，东一句西一句不正经，但气氛拉满",
   },
   老张: {
     profession: "退休前是中学老师，教了半辈子书，爱把话掰开揉碎讲明白",
@@ -114,6 +125,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子偏小、最怕冤枉好人；先压住判断、爱复述别人的话，多听一两轮再表态；稳是稳，但有时太慢、错过出手时机",
     wolfDeception:
       "拿狼牌就端着老好人的稳重，慢悠悠地「帮大家理一理」，悄悄把火往好人身上引",
+    speechHabit: "话偏多、慢条斯理爱铺垫，开口先把别人的话复述一遍再慢慢下结论",
   },
   莉莉: {
     profession: "做销售的，常年在外跑客户，看人有一套",
@@ -121,6 +133,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子大、怀疑全写在脸上；默认人人都有嫌疑，要看到干净表现才肯收回怀疑；多疑过头时容易误伤好人、咬错目标",
     wolfDeception:
       "拿狼牌就把多疑当武器，理直气壮地怀疑好人、反咬一口，把自己显得特别正义",
+    speechHabit: "心里想啥张口就来，语速快、情绪直接挂嘴上，怀疑谁当场就点名",
   },
   大壮: {
     profession: "健身房教练，争强好胜，认死理",
@@ -128,6 +141,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子大、被怀疑就回怼；很在意场上多数人往哪站、倾向顺着票型走；爱立 flag，有时为了赢面硬跟大队、懒得自己独立想",
     wolfDeception:
       "拿狼牌就梗着脖子嘴硬装好人，被质疑反咬一口，借票型优势把好人推下去",
+    speechHabit: "话不长但爱抬杠回怼，喜欢撂狠话立 flag，被顶一句立马梗回去",
   },
   囡囡: {
     profession: "在图书馆做管理员，性子慢，喜欢安安静静",
@@ -135,6 +149,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子小、不爱抢着冲；默认先给人信任，除非出现明显破绽才改判；慢热容易前期没存在感、一不小心信错人被带走",
     wolfDeception:
       "拿狼牌就继续佛系潜水，一副与世无争的样子，关键的票悄悄投给好人",
+    speechHabit: "话少慢热、松松垮垮的，常用「我先听听」「不急哈」，能少说就少说",
   },
   阿明: {
     profession: "做新媒体运营的，天天跟人聊天互动，自来熟",
@@ -142,6 +157,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子中上、爱点名互动；专抓谁发言前后不自洽、立场反复横跳；话多时有点聊散，把简单的事绕复杂",
     wolfDeception:
       "拿狼牌就用自来熟的热乎劲拉关系，主动「帮忙分析」把矛盾安到好人头上，显得自己最操心找狼",
+    speechHabit: "话稍多、热络，爱点名拉人互动「X 你怎么看」，到处串场子接话",
   },
   蓉蓉: {
     profession: "做平面设计的，对细节敏感，一点违和就难受",
@@ -149,6 +165,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子偏小、不抢话；从措辞和反常的小处切入找人；有时太钻细节、放大无关紧要的违和、反而忽略大局",
     wolfDeception:
       "拿狼牌就用「我注意到一个细节」的口吻，把好人的正常发言挑成破绽，引大家怀疑错人",
+    speechHabit: "声音不大、不抢话，爱从一个小细节切进去说，常用「我注意到…」「总觉得哪不对」",
   },
   胖虎: {
     profession: "开大排档的，乐呵呵，做事看实惠",
@@ -156,6 +173,7 @@ export const NAME_CHARACTERS: Record<string, NameCharacter> = {
       "胆子中等、输赢都乐呵；怎么选对自己这边赢面大就怎么来、不钻牛角尖；有时太功利，为赢面随大流而不深究真相",
     wolfDeception:
       "拿狼牌就乐呵呵装老实人，用「听大家的」把自己藏在人群里，关键时刻往对狼有利的方向轻轻一推",
+    speechHabit: "满嘴语气词、乐呵呵的大白话，「嗨」「得嘞」「成成成」张口就来，不爱绕弯子",
   },
 };
 
@@ -167,6 +185,7 @@ export function characterForName(name: string): NameCharacter {
       playMind:
         "打法中规中矩，胆量和怀疑都不极端，跟着场上信息走，不会钻牛角尖",
       wolfDeception: "拿狼牌就尽量装得像个普通好人，不露声色地帮队友",
+      speechHabit: "说话随性、长短看心情，像普通人聊天，不端着也不刻意",
     }
   );
 }

@@ -67,8 +67,9 @@
   font-size: 0.8rem;
 }
 
-/* 调试：导出本局日志按钮（顶部细条最右）。 */
-.status-debug {
+/* 顶部细条右侧按钮：重开新局 / 导出日志。 */
+.status-debug,
+.status-newgame {
   padding: 3px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -80,9 +81,16 @@
   transition: color 0.15s, border-color 0.15s;
 }
 
-.status-debug:hover {
+.status-debug:hover,
+.status-newgame:hover {
   color: var(--ink);
   border-color: var(--gold);
+}
+
+/* 重开新局更显眼一点：金色描边。 */
+.status-newgame {
+  color: var(--gold);
+  border-color: rgba(216, 178, 90, 0.45);
 }
 
 /* 自动流程异常停止时的浮层提示（不参与三列网格，固定在顶部居中）。 */

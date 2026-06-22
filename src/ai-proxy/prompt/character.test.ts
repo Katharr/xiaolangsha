@@ -38,6 +38,18 @@ describe("L0 人物卡 character()", () => {
     expect(text).not.toMatch(/狼人是|预言家是/);
   });
 
+  it("说话习惯只在发言类任务渲染（renderSpeechHabit）", () => {
+    const card = characterForName("胖虎");
+    const noHabit = character(fakeVi({ ownName: "胖虎" }));
+    const withHabit = character(fakeVi({ ownName: "胖虎" }), true);
+    // 默认（逻辑步）不渲染说话习惯，省体积。
+    expect(noHabit).not.toContain(card.speechHabit);
+    expect(noHabit).not.toContain("你说话的习惯：");
+    // 发言类任务才渲染。
+    expect(withHabit).toContain("你说话的习惯：");
+    expect(withHabit).toContain(card.speechHabit);
+  });
+
   it("未知名字回退中性卡、不抛错", () => {
     expect(() => character(fakeVi({ ownName: "查无此人" }))).not.toThrow();
     expect(character(fakeVi({ ownName: "查无此人" }))).toContain("你的性格：");

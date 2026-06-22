@@ -12,7 +12,26 @@ type StatusBarProps = {
   vi: VisibleInformationSnapshot | null;
   /** 点击「导出日志」调试按钮的回调；未提供则不渲染按钮。 */
   onExportDebug?: () => void;
+  /** 点击「重开新局」的回调（结束本局回主界面选模式）；未提供则不渲染按钮。 */
+  onNewGame?: () => void;
 };
+
+/** 重开新局：任何时候结束当前对局、返回主界面重新选模式。始终可点（不随 busy 禁用）。 */
+function NewGameButton({ onNewGame }: { onNewGame?: () => void }) {
+  if (!onNewGame) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="status-newgame"
+      title="结束当前对局，返回主界面重新选择模式"
+      onClick={onNewGame}
+    >
+      🔄 重开新局
+    </button>
+  );
+}
 
 /** 调试按钮：导出本局完整日志，方便排查「卡住没动静」。始终可点（不随 busy 禁用）。 */
 function DebugButton({ onExportDebug }: { onExportDebug?: () => void }) {
@@ -40,6 +59,7 @@ export function StatusBar({
   participation,
   vi,
   onExportDebug,
+  onNewGame,
 }: StatusBarProps) {
   const phaseText = phase ? PHASE_LABEL[phase] : "准备中";
 
@@ -62,6 +82,7 @@ export function StatusBar({
       <span className="status-round">{roundText}</span>
       <span className="status-role">你是：{ROLE_LABEL[vi.ownRole]}</span>
       {spectating ? <span className="status-tag">旁观中</span> : null}
+      <NewGameButton onNewGame={onNewGame} />
       <DebugButton onExportDebug={onExportDebug} />
     </header>
   );

@@ -43,8 +43,7 @@ function fakeVi(
 const configured: ProxyConfig = {
   baseUrl: "https://llm.example/v1",
   apiKey: "secret-key-123",
-  model: "gpt-5.4-mini",
-  reviewModel: "gpt-5.5",
+  models: { speech: "gpt-5.4", reasoning: "gpt-5.5", review: "gpt-5.5" },
   wireApi: "chat",
   timeoutMs: 30_000,
   configured: true,
@@ -210,11 +209,16 @@ describe("handleAiRespond", () => {
     expect(url).toBe("https://llm.example/v1/responses");
   });
 
-  it("uses config.model for in-game tasks and config.reviewModel for review", async () => {
+  it("按任务三档选模型：发言→speech、投票→reasoning、复盘→review", async () => {
     const fetchImpl = vi.fn(async () =>
       chatResponse(JSON.stringify({ text: "ok" })),
     );
 
+    await handleAiRespond(
+      { gameId: "g-1", taskType: "speech", playerId: "ai-1", visibleInformation: fakeVi() },
+      configured,
+      fetchImpl as unknown as typeof fetch,
+    );
     await handleAiRespond(voteRequest(), configured, fetchImpl as unknown as typeof fetch);
     await handleAiRespond(
       {
@@ -229,9 +233,10 @@ describe("handleAiRespond", () => {
 
     const bodyOf = (call: number) =>
       JSON.parse((fetchImpl.mock.calls[call] as unknown as [string, RequestInit])[1].body as string);
-    // 局内发言/投票走 mini；复盘问答走更强的 reviewModel。url/key 共用同一端点。
-    expect(bodyOf(0).model).toBe("gpt-5.4-mini");
+    // 发言走快档 gpt-5.4；投票走推理强档 gpt-5.5；复盘走 gpt-5.5。url/key 共用同一端点。
+    expect(bodyOf(0).model).toBe("gpt-5.4");
     expect(bodyOf(1).model).toBe("gpt-5.5");
+    expect(bodyOf(2).model).toBe("gpt-5.5");
   });
 });
 
@@ -274,15 +279,21 @@ describe("buildPrompt (ISO-001: 只含可见信息)", () => {
     expect(dispLine(jie.system)).not.toBe(dispLine(zhang.system));
   });
 
-  it("speech 指令反复读 + 提示层去偏见", () => {
+  it("speech 指令：松散群聊 + 反复读 + 给情绪口头禅许可", () => {
     const prompt = buildPrompt({
       gameId: "g-1",
       taskType: "speech",
       playerId: "ai-1",
       visibleInformation: fakeVi(),
     });
-    expect(prompt.system).toContain("别附和或复述");
-    expect(prompt.system).toContain("别按发言顺序或座位顺序");
+    // 松散：像群里聊天，挑最在意的点，不用面面俱到（拆掉旧的三段论模板）。
+    expect(prompt.system).toContain("不用面面俱到");
+    // 反复读：别人讲过的别换个说法复读。
+    expect(prompt.system).toContain("别换个说法复读");
+    // 给口头禅/情绪许可（治死板刻意）。
+    expect(prompt.system).toContain("口头禅");
+    // 仍守座位去偏见。
+    expect(prompt.system).toContain("别按座位顺序");
   });
 
   it("gives the same persona for the same name across calls (stable)", () => {
@@ -316,6 +327,8 @@ describe("buildPrompt (ISO-001: 只含可见信息)", () => {
     expect(prompt.system).toContain("对跳");
     expect(prompt.system).toContain("话少");
     expect(prompt.system).toContain("保持一致");
+    // 发言-投票一致绑定（治「嘴上盯 A、票投 B」言行不一）。
+    expect(prompt.system).toContain("言行不一");
     // 候选顺序去偏见提示。
     expect(prompt.system).toContain("不代表任何倾向");
     // 仍不得泄漏其他玩家真实身份的断言式措辞。

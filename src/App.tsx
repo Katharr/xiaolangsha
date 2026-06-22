@@ -78,6 +78,13 @@ export function App({ store }: AppProps) {
     void store.getState().dispatch(action);
   };
 
+  // 重开新局：结束当前对局回主界面选模式。中途弃局不可撤销（清存档），先二次确认防误触。
+  const newGame = () => {
+    if (window.confirm("结束当前对局，返回主界面重新选择模式？")) {
+      void store.getState().abandonGame();
+    }
+  };
+
   // 调试：把本局导出成复盘式中文摘要（.txt），方便把卡住的局发出来排查。
   const exportDebugLog = () => {
     const text = store.getState().exportDebugLog();
@@ -216,6 +223,7 @@ export function App({ store }: AppProps) {
         participation={participation}
         vi={vi}
         onExportDebug={exportDebugLog}
+        onNewGame={newGame}
       />
 
       {haltText ? (

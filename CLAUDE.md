@@ -104,6 +104,17 @@
 - **红线仍守**：`你的性格：`/`你判断局面的倾向：` 两前缀在；各 role 跑 `buildPrompt` 均 `not.toMatch(/狼人是|预言家是/)`；好人 system 不含「悍跳」、狼不含「保护真预言家」；vote system 仍含 `对跳/话少/保持一致/票数本身不是证据/不代表任何倾向`。
 - 基线：`tsc -b` 绿、`npm test` **161 绿**、`npm run build` 绿。**仍待手测验证发言质量是否真的变短变像人、预言家是否肯报信息**（dev server 改提示词后需重启 `npm run dev` 才生效——ai-proxy 是 Vite 中间件、不走前端 HMR）。
 
+### 治发言「刻意死板/雷同」: 拆三段论模板 + 加说话习惯维度（2026-06-22）
+
+- **背景**：手测一局（`ai-trace.jsonl`）+ 对照调研 `docs/AI-PROMPT-RESEARCH.md` 发现：上一版（提示词精简后）发言虽变短，但**仍刻意死板、好人发言雷同**。trace 铁证：6 条白天发言里 **5 条**以「我接 X 这句/我先回 X 一句」开场，且人人「站完队挂一句『但我补个角度』」（老张/胖虎补的甚至同一条）。
+- **根因（非体积）**：①`task.ts` 的 speech 是**强制三段论模板**（先点名回应一人 → 给判断且「和前面一致必须补一条新理由」→ 才说大白话）——开场公式化 + 全桌作文同题；②人物卡缺 wolfcha 那种**直接调「怎么说出来」的表达维度**（`speechLengthHabit`/`tablePresence`/`vocabularyStyle`），`playMind` 又不渲染 → 每条都 4–6 句、长度风格抹平。
+- **改法（1+2+3，调研驱动、体积持平：删模板行≈加风格行）**：
+  1. **拆三段论**（`prompt/task.ts` speech）：改成松散「群聊式给许可」——挑最在意的一点说即可，可只回应一人/附和/抬杠/只甩态度，**不用面面俱到、不用每次先报「我回应谁」**；只保留反趋同硬约束「别换个说法复读」+ 座位去偏见。依据 wolfcha「不需完美/不需覆盖所有人」+ AmongAgents「故意不完美增强拟人」。
+  2. **加说话习惯维度**：`shared/personas.ts` 的 `NameCharacter` 新增 `speechHabit`（10 名各一句 + fallback，专调长短/抢话度/口头禅/语气，阵营中立不含真相）；`prompt/character.ts` 加 `renderSpeechHabit` 形参，**仅发言类任务**（speech/tie_speech/last_words，由 `prompt/index.ts` 按 taskType 传入）渲染「你说话的习惯：…」，逻辑步不渲染省体积。
+  3. **发言温度 0.9 → 1.0**（`config.ts` `temperatureForTask`，对齐 wolfcha CREATIVE；发言已改松散式、不再靠低温压模板）。
+- **红线仍守**：L2/L3 判读与「采信单跳预言家/神职别潜水」不在任务层、未受影响；`你的性格：`/`你判断局面的倾向：` 前缀在；speechHabit 阵营中立、`not.toMatch(/狼人是|预言家是/)`。
+- 测试：`character.test` 加「说话习惯只在发言渲染」、`handler.test` speech 断言改为新文案（不用面面俱到/别换个说法复读/口头禅/别按座位顺序）。基线：`tsc -b` 绿、`npm test` **164 绿**、`vite build` 绿。发言 system ≈1380 字符（同口径仍轻）。**仍待手测：发言是否真的不再公式化开场、长短风格分化、像真人。**（改完须重启 `npm run dev`。）
+
 ## 构建计划（7 里程碑，详见 `docs/BUILD-PLAN.md`）
 
 - **M0** 工程准备：✅ **已完成**——分支 `build/mvp-playable` 已建；`zustand@5`/`dexie@4`/`fake-indexeddb@6` 已装；基线 `npm test` 32 绿。下一步直接进 M1。

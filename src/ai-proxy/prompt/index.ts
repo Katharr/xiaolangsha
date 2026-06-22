@@ -51,10 +51,13 @@ export function buildPrompt(req: AiTaskRequest): PromptMessages {
   const vi = req.visibleInformation;
   const draft = req.promptContext?.currentText;
   const taskType = req.taskType as InGameTaskType;
+  // 说话习惯只在发言类任务渲染（speech/tie_speech/last_words），逻辑步不渲染（省体积）。
+  const isSpeechTask =
+    taskType === "speech" || taskType === "tie_speech" || taskType === "last_words";
 
   return {
     system: [
-      character(vi), // L0
+      character(vi, isSpeechTask), // L0
       table(vi), // L1
       worldModel(), // L2
       factionPlaybook(vi), // L3
