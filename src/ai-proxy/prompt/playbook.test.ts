@@ -29,6 +29,20 @@ describe("L3 阵营打法 playbook()", () => {
     expect(villager).not.toContain("潜水");
   });
 
+  it("角色战术卡：女巫/猎人默认潜水自保（修「神职别藏」泛化），且只渲染自己那张", () => {
+    const witch = goodPlaybook(fakeVi({ ownRole: "witch", ownFaction: "good_team" }));
+    expect(witch).toContain("潜水自保");
+    expect(witch).toContain("解药");
+    // 女巫卡不含预言家「必跳必报」那句。
+    expect(witch).not.toContain("别只顾自保潜水");
+
+    const hunter = goodPlaybook(fakeVi({ ownRole: "hunter", ownFaction: "good_team" }));
+    expect(hunter).toContain("亮枪");
+    expect(hunter).toContain("别早跳");
+    // 猎人卡不会泄露女巫的「解药」战术。
+    expect(hunter).not.toContain("解药");
+  });
+
   it("狼人段：护队友 + 悍跳，并带出队友名单", () => {
     const vi = fakeVi({
       ownRole: "werewolf",

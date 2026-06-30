@@ -33,6 +33,12 @@ describe("L2 世界模型 worldModel()", () => {
     expect(text).toContain("给信息的好人");
   });
 
+  it("含平安夜公共认知：无守卫局平安夜=女巫救人、解药已耗", () => {
+    const text = worldModel();
+    expect(text).toContain("平安夜");
+    expect(text).toContain("解药已耗");
+  });
+
   it("不出现身份断言子串", () => {
     expect(worldModel()).not.toMatch(/狼人是|预言家是/);
   });

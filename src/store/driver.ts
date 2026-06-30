@@ -385,6 +385,18 @@ export async function runAiDriver(
       break;
     }
 
+    // 投票是暗投并行模型：把本轮所有待投 AI 一次性并发决策，避免一票一票串行干等 LLM
+    //（慢、且 UI 全程无反馈像卡死）。其余相位（含有先后依赖的发言）仍逐步串行。
+    if (step.kind === "ai" && step.taskType === "vote") {
+      const batch = await runVoteBatch(state, options);
+      state = batch.state;
+      if (batch.halt) {
+        halt = batch.halt;
+        break;
+      }
+      continue;
+    }
+
     const now =
       typeof options.now === "function" ? options.now() : options.now;
     const seq = state.snapshot.lastEventSeq;
@@ -496,6 +508,127 @@ export async function runAiDriver(
 
   options.onHalt?.(halt);
   return state;
+}
+
+/**
+ * 并发投票批处理：投票是暗投并行模型——本轮所有待投 AI 基于「投票前」的同一份快照各自独立
+ * 决策，一次性并发请求 LLM（而非一票一票串行干等），回来后顺序落地（applyAction 同步、很快）。
+ * 每票复用与串行步相同的降级安全网（规则拒绝→脚本安全动作顶上）。
+ * 返回新状态；遇到无法继续的异常时附带 halt，由主循环据此停下。
+ */
+async function runVoteBatch(
+  state: DriverState,
+  options: DriverOptions,
+): Promise<{ state: DriverState; halt?: DriverHalt }> {
+  const voteState = state.snapshot.voteState;
+  if (!voteState || voteState.resolved) {
+    return { state };
+  }
+  const aiVoterIds = voteState.eligibleVoterIds.filter((id) => {
+    if (voteState.submittedVoterIds.includes(id)) {
+      return false;
+    }
+    const player = state.snapshot.players.find((p) => p.playerId === id);
+    return Boolean(player && player.controller === "ai" && player.alive);
+  });
+  if (aiVoterIds.length === 0) {
+    return { state };
+  }
+
+  // 匿名投票指示：只播报「正在投票」，不暴露是谁、也不暴露顺序（暗投）。
+  options.onActorThinking?.({ actorId: aiVoterIds[0], taskType: "vote" });
+
+  // 并发决策：所有待投 AI 都看「投票前」的同一份快照（互不影响，忠于暗投并行模型）。
+  const gameId = state.snapshot.gameId;
+  const decisions = await Promise.all(
+    aiVoterIds.map(async (actorId) => {
+      const visibleInformation = buildVisibleInformation(
+        actorId,
+        state.snapshot,
+        state.events,
+      );
+      const request = buildRequest(
+        { kind: "ai", actorId, taskType: "vote" },
+        visibleInformation,
+        gameId,
+      );
+      const response = await options.ai.respond(request);
+      return { actorId, response };
+    }),
+  );
+
+  // 并发请求期间可能被作废（旁观中真人重开一局）：不写入任何状态。
+  if (options.isCancelled?.()) {
+    return { state, halt: { reason: "idle", phase: state.snapshot.gamePhase } };
+  }
+
+  // 顺序落地。idempotencyKey 含 actorId + 当前 seq，逐票唯一。
+  for (const { actorId, response } of decisions) {
+    const voteStep = { kind: "ai" as const, actorId, taskType: "vote" as const };
+    if (!response.ok) {
+      // withFallback 应保证有兜底；万一仍失败，按串行同样语义停下。
+      return {
+        state,
+        halt: {
+          reason: "ai_error",
+          actorId,
+          taskType: "vote",
+          error: response.error,
+        },
+      };
+    }
+    const now =
+      typeof options.now === "function" ? options.now() : options.now;
+    const seq = state.snapshot.lastEventSeq;
+    const idempotencyKey = `${state.snapshot.gameId}-drv-${actorId}-vote-${seq}`;
+    let action = payloadToAction({
+      step: voteStep,
+      payload: response.data,
+      snapshot: state.snapshot,
+      idempotencyKey,
+    });
+    if (!action) {
+      return {
+        state,
+        halt: { reason: "invalid_payload", actorId, taskType: "vote" },
+      };
+    }
+    let result = applyAction(action, {
+      session: state.session,
+      snapshot: state.snapshot,
+      events: state.events,
+      now,
+    });
+    // 降级安全网（与串行步一致）：AI 返回语法合法但规则非法的票 → 脚本安全动作顶上再试。
+    if (!result.ok) {
+      options.onDegrade?.({ actorId, taskType: "vote", rejected: result.error });
+      const safeAction = await degradeToSafeAction(
+        voteStep,
+        state,
+        `${idempotencyKey}-fallback`,
+      );
+      if (safeAction) {
+        action = safeAction;
+        result = applyAction(safeAction, {
+          session: state.session,
+          snapshot: state.snapshot,
+          events: state.events,
+          now,
+        });
+      }
+    }
+    if (!result.ok) {
+      return { state, halt: { reason: "rule_rejected", action, error: result.error } };
+    }
+    state = {
+      session: result.data.session,
+      snapshot: result.data.snapshot,
+      events: [...state.events, ...result.data.events],
+    };
+    await options.onStep?.(state);
+  }
+
+  return { state };
 }
 
 /**

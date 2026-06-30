@@ -309,6 +309,29 @@
   font-size: 0.92rem;
   line-height: 1.55;
 }
+/* 追问思考中：问题先上屏，答案位显示「AI 正在思考…」+ 跳动省略号。 */
+.rv-qa .qa-pending .qa-a.thinking {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+.rv-qa .qa-dots::after {
+  content: "…";
+  animation: qa-dots 1.2s steps(4, end) infinite;
+}
+@keyframes qa-dots {
+  0% {
+    content: "";
+  }
+  25% {
+    content: "·";
+  }
+  50% {
+    content: "··";
+  }
+  75% {
+    content: "···";
+  }
+}
 
 /* ===== 5. 按钮 ===== */
 .rv-btn {

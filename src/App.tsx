@@ -67,8 +67,12 @@ export function App({ store }: AppProps) {
   const diagnostics = useStore(store, (s) => s.diagnostics);
 
   const keyCounter = useRef(0);
+  // 每次页面加载随机生成的 session salt：保证创建游戏的 idempotencyKey 跨会话不重复，
+  // 从而座位/名字/职业每局都重新洗牌（规则层是纯函数、只能靠这里注入熵），
+  // 不再恒为「ui-create-1」导致真人永远同名、神职永远落同一座位。
+  const sessionSalt = useRef(Math.random().toString(36).slice(2, 10));
   const nextKey = (prefix: string) =>
-    `ui-${prefix}-${(keyCounter.current += 1)}`;
+    `ui-${prefix}-${sessionSalt.current}-${(keyCounter.current += 1)}`;
 
   useEffect(() => {
     void store.getState().bootstrap();

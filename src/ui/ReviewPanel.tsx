@@ -53,6 +53,8 @@ export function ReviewPanel({
 }: ReviewPanelProps) {
   const [qaLog, setQaLog] = useState<QaEntry[]>([]);
   const [qaId, setQaId] = useState(0);
+  // 追问进行中显示的问题：await 期间先把问题上屏 + 显示「思考中」，让用户看到「已点到、在等待」。
+  const [pending, setPending] = useState<string | null>(null);
 
   const byId = useMemo(() => {
     const map = new Map<string, Player>();
@@ -111,12 +113,17 @@ export function ReviewPanel({
     );
 
   const handleAsk = async (question: string): Promise<boolean> => {
-    const result = await askReview(question);
-    const answer = result.ok ? result.data : toUserMessage(result.error);
-    const id = qaId + 1;
-    setQaId(id);
-    setQaLog((log) => [...log, { id, question, answer }]);
-    return result.ok;
+    setPending(question);
+    try {
+      const result = await askReview(question);
+      const answer = result.ok ? result.data : toUserMessage(result.error);
+      const id = qaId + 1;
+      setQaId(id);
+      setQaLog((log) => [...log, { id, question, answer }]);
+      return result.ok;
+    } finally {
+      setPending(null);
+    }
   };
 
   const winWolf = reviewContext.winner === "werewolf_team";
@@ -175,7 +182,7 @@ export function ReviewPanel({
       {/* 4. 向 AI 追问 */}
       <section className="rv-card">
         <h2 className="rv-title">向 AI 追问</h2>
-        {qaLog.length > 0 ? (
+        {qaLog.length > 0 || pending ? (
           <ul className="rv-qa">
             {qaLog.map((entry) => (
               <li key={entry.id}>
@@ -183,6 +190,14 @@ export function ReviewPanel({
                 <p className="qa-a">答：{entry.answer}</p>
               </li>
             ))}
+            {pending ? (
+              <li className="qa-pending">
+                <p className="qa-q">问：{pending}</p>
+                <p className="qa-a thinking">
+                  AI 正在思考<span className="qa-dots" aria-hidden="true" />
+                </p>
+              </li>
+            ) : null}
           </ul>
         ) : null}
         <TextInput

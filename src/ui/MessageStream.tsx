@@ -101,6 +101,23 @@ function ThinkingBubble({
   thinking: ThinkingState;
   nightStepKind?: NightStepKind | null;
 }) {
+  // 投票匿名：暗投只播报「正在投票」，不暴露是谁、不暴露顺序（多名 AI 并发投票时也只显示这一条）。
+  if (thinking.anonymous && thinking.taskType === "vote") {
+    return (
+      <div className="chat-notice chat-notice-vote" aria-label="投票进行中">
+        <span className="chat-notice-tag">投票</span>
+        <span className="chat-notice-text">
+          正在投票，玩家们陆续暗投中…
+          <span className="chat-typing">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   // 夜晚匿名：只播报「当前在等哪个角色」，绝不暴露具体行动者身份（ISO-001）。
   if (thinking.anonymous) {
     const waitingFor = nightStepKind ? NIGHT_STEP_LABEL[nightStepKind] : null;

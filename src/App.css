@@ -757,6 +757,13 @@
   color: #b9cbe2;
 }
 
+/* 投票进行中指示（暗投匿名，多名 AI 并发投票时只显示这一条） */
+.chat-notice-vote {
+  background: #1d2530;
+  border-color: #2f3f55;
+  color: #b9cbe2;
+}
+
 .chat-notice-system {
   background: #2a1815;
   border-color: #5a2c26;

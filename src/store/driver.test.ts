@@ -176,6 +176,52 @@ function reachHumanDeadSpectating(): DriverState {
   return state;
 }
 
+/** 走到首个白天投票相位，谁都还没投票（真人存活、与 AI 同为待投者）。 */
+function reachVote(): DriverState {
+  let state = reachNight();
+  const wolfId = playerIdByRole(state.snapshot, "werewolf");
+  const seerId = playerIdByRole(state.snapshot, "seer");
+  const killedVillagerId =
+    state.snapshot.players.find(
+      (player) => player.role === "villager" && !player.isHuman,
+    )?.playerId ?? "";
+
+  state = step(state, {
+    type: "submit_night_action",
+    idempotencyKey: "rv-wolf-kill",
+    actorId: wolfId,
+    actionType: "werewolf_kill",
+    targetId: killedVillagerId,
+  });
+  state = step(state, {
+    type: "submit_night_action",
+    idempotencyKey: "rv-seer-check",
+    actorId: seerId,
+    actionType: "seer_check",
+    targetId: wolfId,
+  });
+
+  expect(state.snapshot.gamePhase).toBe("day_announcement");
+  state = step(state, {
+    type: "confirm_day_announcement",
+    idempotencyKey: "rv-confirm-day",
+    playerId: humanPlayerId,
+  });
+
+  const speakerOrder = state.snapshot.speechState?.speakerOrder ?? [];
+  for (const speakerId of speakerOrder) {
+    state = step(state, {
+      type: "submit_speech",
+      idempotencyKey: `rv-speech-${speakerId}`,
+      speakerId,
+      text: `${speakerId} 的发言。`,
+    });
+  }
+
+  expect(state.snapshot.gamePhase).toBe("vote");
+  return state;
+}
+
 describe("runAiDriver", () => {
   it("drives the AI night actions then stops for the alive human", async () => {
     const ai = new ScriptedAiClient();
@@ -331,6 +377,56 @@ describe("runAiDriver", () => {
     expect(driven.snapshot.gamePhase).toBe("night_action");
     expect(halts.at(-1)?.reason).toBe("ai_error");
     expect(isAbnormalHalt(halts.at(-1) ?? null)).toBe(true);
+  });
+
+  it("casts all pending AI votes concurrently in one batch (并发投票，不再一票票串行)", async () => {
+    const scripted = new ScriptedAiClient();
+    const state = reachVote();
+    const aiVoters = (state.snapshot.voteState?.eligibleVoterIds ?? []).filter(
+      (id) => {
+        const player = state.snapshot.players.find((p) => p.playerId === id);
+        return Boolean(player && !player.isHuman && player.alive);
+      },
+    );
+    // 该板首个白天有多名存活 AI，足以体现并发。
+    expect(aiVoters.length).toBeGreaterThan(1);
+
+    // 并发探针：所有投票请求必须「同时在飞」才会被放行；若实现仍是串行，
+    // 第一个请求会死等（后续票尚未发起）→ 测试超时，从而锁死并发行为。
+    let inFlight = 0;
+    let release: () => void = () => {};
+    const allInFlight = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const concurrentAi: AiClient = {
+      async respond(req) {
+        if (req.taskType === "vote") {
+          inFlight += 1;
+          if (inFlight === aiVoters.length) {
+            release();
+          }
+          await allInFlight;
+        }
+        return scripted.respond(req);
+      },
+    };
+    const spy = vi.spyOn(concurrentAi, "respond");
+
+    const driven = await runAiDriver(state, {
+      ai: concurrentAi,
+      humanPlayerId,
+      now,
+    });
+
+    // 所有 AI 票都已落地，停下等存活真人投票（vote 未结算）。
+    const submitted = driven.snapshot.voteState?.submittedVoterIds ?? [];
+    for (const id of aiVoters) {
+      expect(submitted).toContain(id);
+    }
+    expect(submitted).not.toContain(humanPlayerId);
+    expect(driven.snapshot.gamePhase).toBe("vote");
+    const voteCalls = spy.mock.calls.filter((c) => c[0].taskType === "vote");
+    expect(voteCalls).toHaveLength(aiVoters.length);
   });
 
   it("nextDriverStep stops at terminal/setup phases", () => {

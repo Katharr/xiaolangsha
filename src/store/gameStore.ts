@@ -196,9 +196,10 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
             (candidate) => candidate.playerId === actorId,
           );
           // 夜晚行动对非真人匿名：只暴露「夜里有人在行动」，绝不暴露是谁（防泄狼/神身份）。
+          // 投票同样匿名：暗投不暴露是谁在投、也不暴露投票顺序，只显示「正在投票」。
           const isNight = snapshot?.gamePhase === "night_action";
           const isHuman = player?.isHuman ?? false;
-          if (isNight && !isHuman) {
+          if (taskType === "vote" || (isNight && !isHuman)) {
             set({ thinking: { taskType, anonymous: true } });
             return;
           }
@@ -327,17 +328,35 @@ export function createGameStore(deps: GameStoreDeps): GameStore {
             },
           };
         }
-        const response = await ai.respond({
-          gameId: snapshot.gameId,
-          taskType: "review_question",
-          questionText: question,
-          reviewContext,
-        });
-        if (!response.ok) {
-          return { ok: false, error: response.error };
+        // busy 置真：UI 据此禁用追问输入与「开始新局」，避免连点并发触发多次 LLM 调用。
+        if (get().busy) {
+          return {
+            ok: false,
+            error: {
+              code: "ACTION_NOT_ALLOWED",
+              message: "正在处理上一条追问，请稍候。",
+              userMessage: "正在处理上一条追问，请稍候。",
+              retryable: true,
+              source: "app",
+            },
+          };
         }
-        const text = (response.data.text ?? "").trim();
-        return { ok: true, data: text.length > 0 ? text : "（AI 未给出回答）" };
+        set({ busy: true });
+        try {
+          const response = await ai.respond({
+            gameId: snapshot.gameId,
+            taskType: "review_question",
+            questionText: question,
+            reviewContext,
+          });
+          if (!response.ok) {
+            return { ok: false, error: response.error };
+          }
+          const text = (response.data.text ?? "").trim();
+          return { ok: true, data: text.length > 0 ? text : "（AI 未给出回答）" };
+        } finally {
+          set({ busy: false });
+        }
       },
 
       exportDebugLog: (): string => {
