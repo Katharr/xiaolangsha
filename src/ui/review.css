@@ -354,10 +354,13 @@
   cursor: default;
 }
 .rv-newgame {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
   padding-top: 2px;
 }
-.rv-newgame .rv-btn {
+.rv-newgame .rv-btn.primary {
   padding: 13px 40px;
   font-size: 1.02rem;
 }

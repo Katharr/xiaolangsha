@@ -263,6 +263,7 @@ export function App({ store }: AppProps) {
               nextKey={nextKey}
               act={act}
               askReview={(question) => store.getState().askReview(question)}
+              onExportDebug={exportDebugLog}
             />
           ) : (
             <MessageStream

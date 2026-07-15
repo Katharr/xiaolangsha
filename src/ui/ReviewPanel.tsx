@@ -26,6 +26,8 @@ export type ReviewPanelProps = {
   nextKey: (prefix: string) => string;
   act: (action: GameAction) => void;
   askReview: (question: string) => Promise<Result<string>>;
+  /** 导出本局调试日志（复盘态没有牌桌工具钮，这里是正常结局的唯一导出入口）。 */
+  onExportDebug: () => void;
 };
 
 type QaEntry = { id: number; question: string; answer: string };
@@ -50,6 +52,7 @@ export function ReviewPanel({
   nextKey,
   act,
   askReview,
+  onExportDebug,
 }: ReviewPanelProps) {
   const [qaLog, setQaLog] = useState<QaEntry[]>([]);
   const [qaId, setQaId] = useState(0);
@@ -211,7 +214,7 @@ export function ReviewPanel({
         />
       </section>
 
-      {/* 5. 开始新局 */}
+      {/* 5. 开始新局 / 导出本局记录 */}
       <div className="rv-newgame">
         <button
           type="button"
@@ -226,6 +229,9 @@ export function ReviewPanel({
           }
         >
           开始新局
+        </button>
+        <button type="button" className="rv-btn" onClick={onExportDebug}>
+          ⛏ 导出本局记录
         </button>
       </div>
     </div>
