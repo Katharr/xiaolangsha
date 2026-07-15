@@ -24,6 +24,7 @@
 2. AI 用 **OpenAI 兼容**第三方 endpoint，模型 **`gpt-5.5`**。代理默认走 chat completions，`AI_WIRE_API=chat|responses` 开关备用。
 3. **凭证由用户自己填项目 `.env`**（进 `.gitignore`，只在服务端代理进程读，绝不进浏览器 / git）。只提供 `.env.example` 模板；
    **绝不要碰 `C:/vibecoding/auth.json`（那是 Codex 的 key）**。
+4. **规则铁律（用户拍板，写测试一并验收）**：① **投票全程保密**——投票中零计票 UI，票向/票数只在 `vote_resolved` 一次性揭示（防跟票）；② **夜死不公布死法**——毒杀对局内一律显示「夜里出局」（`visibility.ts` 的 `maskNightDeathCause` 掩蔽 `vi.deadPlayers` 与公共 `player_died` payload），只在复盘揭示真相。
 
 ## 可复用核心架构（保留，勿重写）
 

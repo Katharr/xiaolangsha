@@ -1,4 +1,5 @@
 import type {
+  DeathCause,
   GameSnapshot,
   LegalAction,
   NightActionType,
@@ -6,6 +7,7 @@ import type {
   Player,
   PublicDeathRef,
   PublicPlayerRef,
+  RoundRef,
   TeammateRef,
   TruthEvent,
   VisibleEventRef,
@@ -45,7 +47,14 @@ export function buildVisibleInformation(
       .map(toPublicPlayerRef),
     deadPlayers: snapshot.players
       .filter((player) => !player.alive && player.deathCause)
-      .map(toPublicDeathRef),
+      .map((player) =>
+        toPublicDeathRef(
+          player,
+          player.deathEventId
+            ? roundByEventId(events, player.deathEventId)
+            : undefined,
+        ),
+      ),
     publicEvents: events
       .filter((event) => event.visibility.public)
       .map(toVisibleEventRef),
@@ -117,25 +126,48 @@ function toPublicPlayerRef(player: Player): PublicPlayerRef {
   };
 }
 
-function toPublicDeathRef(player: Player): PublicDeathRef {
+/**
+ * 规则铁律：夜死不公布死法——被毒对外一律归并为「夜里出局」，让博弈多样化
+ * （好人无法白拿「场上有女巫在用毒」的信息）。白天死法（放逐/猎人枪）仍公开。
+ * 女巫自己的用毒记录走 privateEvents 不受影响；复盘经 reviewContext 读
+ * TruthEvent 真相（ISO-002），也不受影响。
+ */
+function maskNightDeathCause(cause: DeathCause): DeathCause {
+  return cause === "poison" ? "night_kill" : cause;
+}
+
+/** 死亡事件的回合（PublicDeathRef.round 的数据源；找不到时退回 0 占位）。 */
+function roundByEventId(
+  events: TruthEvent[],
+  eventId: string,
+): RoundRef | undefined {
+  return events.find((event) => event.eventId === eventId)?.round;
+}
+
+function toPublicDeathRef(player: Player, round?: RoundRef): PublicDeathRef {
   return {
     playerId: player.playerId,
     name: player.name,
     seat: player.seat,
-    deathCause: player.deathCause ?? "night_kill",
-    round: { night: 0, day: 0, voteRound: "none" },
+    deathCause: maskNightDeathCause(player.deathCause ?? "night_kill"),
+    round: round ?? { night: 0, day: 0, voteRound: "none" },
     ...(player.isRoleVisiblePublicly ? { publicRole: player.role } : {}),
   };
 }
 
 function toVisibleEventRef(event: TruthEvent): VisibleEventRef {
+  // player_died 是公共事件且 payload 带真实死因：对局内可见层同样掩蔽毒杀。
+  let payload = event.payload;
+  if (event.type === "player_died" && payload.deathCause === "poison") {
+    payload = { ...payload, deathCause: maskNightDeathCause("poison") };
+  }
   return {
     eventId: event.eventId,
     seq: event.seq,
     type: event.type,
     phase: event.phase,
     round: event.round,
-    payload: event.payload,
+    payload,
   };
 }
 

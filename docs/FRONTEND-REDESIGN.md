@@ -231,8 +231,12 @@ serif 标题（衬体字，用于阶段/字幕） + sans 正文
     `seatTokens(.test)` / `VoteFlow` / `VoteStage` / `useVoteReveal`；删除 `StatusBar.tsx`、Roster 导出。
   - 测试：App.test 断言迁移（`getByLabelText("你的身份：村民")` + 铭牌存活计数）；
     `seatTokens.test.ts` 四视角 token 互斥 + tooltip 纪律 + ×N 口径。反泄露正则 `/狼人|预言家/` 保留有效。
-  - 已知口径：死因牌向全场公开死法（刀/毒），与引擎既有契约一致（原死亡公告即公开「被毒杀」）；
-    若要收紧「夜死不公布死法」需改引擎口径，另议。
+  - **死因口径（用户拍板的规则铁律）：夜死不公布死法**——visibility 层统一掩蔽
+    （`maskNightDeathCause`：poison 对外归并 night_kill，`vi.deadPlayers` 与公共
+    `player_died` payload 双口子都蔽），死因牌用通用「倒·夜N」文案；女巫私密用毒记录
+    与狼的击杀记录不受影响；复盘 reviewContext / debug 导出读 TruthEvent 真相（ISO-002）。
+    白天死法（放逐/猎人枪）仍公开。顺手修复 `PublicDeathRef.round` 恒为 0 的占位 bug
+    （现从死亡事件回填，死因牌轮次因此才正确）。
 - **阶段 5** — 复盘时间线：`ReviewPanel` 从 6 平铺列表重构成按「夜/天 轮次」分组的可点/可拖时间轴，
   复用 `reviewContext`，AI 追问保留。
 - **阶段 6** — 打磨 + 回归：toast/loading 反馈、错误更显眼；响应式 + 5/7 人全回归；

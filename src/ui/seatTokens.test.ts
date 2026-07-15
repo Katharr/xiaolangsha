@@ -137,7 +137,7 @@ describe("privateSeatTokens 四视角互斥", () => {
     expect(kinds.has("save")).toBe(false);
   });
 
-  it("女巫：救回挂 save；毒 token 只在目标已死于 poison 时出现（同帧纪律）", () => {
+  it("女巫：救回挂 save；毒 token 只在目标已死后出现（同帧纪律，死因对外已掩蔽）", () => {
     const poisonSubmitted = ev("night_action_submitted", 2, {
       actionType: "witch_poison",
       targetId: pid(4),
@@ -153,7 +153,8 @@ describe("privateSeatTokens 四视角互斥", () => {
     expect(before.get(pid(1))?.[0]).toMatchObject({ kind: "save" });
     expect(before.has(pid(4))).toBe(false);
 
-    // 目标已死于 poison：与公开死因牌同帧挂出。
+    // 目标已死（可见死因被 visibility 掩蔽为 night_kill——夜死不公布死法）：
+    // 毒 token 与公开死亡同帧挂出，依据是女巫自己的 witch_poison 私密事件。
     const after = privateSeatTokens(
       baseVi("witch", {
         privateEvents: [saveSubmitted, poisonSubmitted],
@@ -162,7 +163,7 @@ describe("privateSeatTokens 四视角互斥", () => {
             playerId: pid(4),
             name: NAMES[3],
             seat: 4,
-            deathCause: "poison",
+            deathCause: "night_kill",
             round: { night: 2, day: 2, voteRound: "none" },
           },
         ],
@@ -277,6 +278,8 @@ describe("deathChips", () => {
     });
     const m = deathChips(vi);
     expect(m.get(pid(5))).toMatchObject({ text: "逐·天1", xn: 3 });
-    expect(m.get(pid(4))).toMatchObject({ text: "刀·夜2", xn: null });
+    // 夜死统一「倒牌」文案（死法不公开）。
+    expect(m.get(pid(4))).toMatchObject({ text: "倒·夜2", xn: null });
+    expect(m.get(pid(4))?.tip).toContain("死法不公开");
   });
 });

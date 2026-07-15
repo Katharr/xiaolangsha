@@ -236,14 +236,12 @@ export function privateSeatTokens(
           tip: `第${s.night}夜 你用解药救回 · 仅你可见`,
         });
       }
-      // 毒杀 token 与公开死因牌同帧：目标必须已死于 poison。
-      const poisonedDead = new Set(
-        vi.deadPlayers
-          .filter((d) => d.deathCause === "poison")
-          .map((d) => d.playerId),
-      );
+      // 毒杀 token 与公开死亡同帧：目标必须已在 deadPlayers（不得早于 death 事件）。
+      // 注意公开死因已被 visibility 层掩蔽（夜死不公布死法），这里只看「已死」，
+      // 「死于你的毒」这件事本身来自女巫自己的 witch_poison 私密事件。
+      const deadIds = new Set(vi.deadPlayers.map((d) => d.playerId));
       for (const p of poisons) {
-        if (poisonedDead.has(p.targetId)) {
+        if (deadIds.has(p.targetId)) {
           push(p.targetId, {
             kind: "poison",
             ch: "毒",
@@ -341,17 +339,13 @@ export function deathChips(
   const m = new Map<string, DeathChip>();
   for (const d of vi.deadPlayers) {
     switch (d.deathCause) {
+      // 夜死不公布死法（规则铁律，visibility 层已掩蔽毒杀）：统一「倒牌」文案。
+      // poison 分支只是防御——正常对局可见层不会出现。
       case "night_kill":
-        m.set(d.playerId, {
-          text: `刀·夜${d.round.night}`,
-          tip: `第${d.round.night}夜 夜里出局`,
-          xn: null,
-        });
-        break;
       case "poison":
         m.set(d.playerId, {
-          text: `毒·夜${d.round.night}`,
-          tip: `第${d.round.night}夜 被毒杀`,
+          text: `倒·夜${d.round.night}`,
+          tip: `第${d.round.night}夜 夜里出局 · 死法不公开`,
           xn: null,
         });
         break;

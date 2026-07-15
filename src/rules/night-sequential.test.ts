@@ -317,6 +317,28 @@ describe("顺序夜晚 + 女巫 + 屠边", () => {
       state.snapshot.players.find((p) => p.playerId === seer)?.deathCause,
     ).toBe("poison");
     expect(state.snapshot.witchState?.poisonAvailable).toBe(false);
+
+    // 规则铁律：夜死不公布死法——可见层把毒杀掩蔽为「夜里出局」（博弈多样化）。
+    // 村民（真人）视角：deadPlayers 与公共 player_died 事件都看不到 poison。
+    const vi = buildVisibleInformation(humanPlayerId, state.snapshot, state.events);
+    const seerDeath = vi.deadPlayers.find((d) => d.playerId === seer);
+    expect(seerDeath?.deathCause).toBe("night_kill");
+    expect(seerDeath?.round.night).toBe(1); // 死亡回合已从死亡事件回填（不再是 0 占位）
+    expect(
+      vi.publicEvents.some(
+        (e) => e.type === "player_died" && e.payload.deathCause === "poison",
+      ),
+    ).toBe(false);
+    // 女巫自己的用毒记录（私密事件）不受掩蔽影响。
+    const wvi = buildVisibleInformation(witch, state.snapshot, state.events);
+    expect(
+      wvi.privateEvents.some(
+        (e) =>
+          e.type === "night_action_submitted" &&
+          e.payload.actionType === "witch_poison",
+      ),
+    ).toBe(true);
+    // 真相层（snapshot/TruthEvent）保留 poison，复盘可经 reviewContext 揭示（ISO-002）。
   });
 
   it("女巫首夜不能自救", () => {
