@@ -404,6 +404,10 @@ body.is-day .felt {
   color: var(--ink-faint);
 }
 
+.rv-row.abs .rv-chip {
+  filter: grayscale(1) brightness(0.7);
+}
+
 .stage.reveal.exile .rv-row {
   animation: rvIn 0.22s ease-out both, rvShrink 0.25s ease-out both;
   animation-delay: var(--d, 0s), var(--dv, 1s);

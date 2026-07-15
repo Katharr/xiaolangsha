@@ -649,6 +649,28 @@ button.target.selected {
   font-weight: 600;
 }
 
+/* 已投出确认条（投票期间全页唯一出现「你投了谁」的地方，蓝灰投票视觉系） */
+.vote-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--vote-bg);
+  border: 1px solid var(--vote-line);
+}
+
+.vote-confirm .vc-main {
+  font-size: 0.82rem;
+  color: var(--vote-ink);
+  font-weight: 600;
+}
+
+.vote-confirm .vc-sub {
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
 .text-input {
   padding: 0 16px 14px;
 }

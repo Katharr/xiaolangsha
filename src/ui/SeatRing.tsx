@@ -7,20 +7,26 @@ import "./table.css";
 import type { GamePhase, VisibleInformationSnapshot } from "../shared";
 import type { ChatMessage, ThinkingState } from "../store";
 
+import type { CSSProperties } from "react";
+
 import { Avatar } from "./Avatar";
 import { ROLE_LABEL, TASK_THINKING_LABEL } from "./labels";
 import { PlayerName, bareName } from "./PlayerName";
 import {
+  collectResolved,
   deathChips,
   ownRoleBadge,
   privateSeatTokens,
   type DeathChip,
   type OwnRoleBadge,
+  type Resolved,
   type SeatToken,
 } from "./seatTokens";
 import { TableLegend } from "./TableLegend";
 import { TablePlaque } from "./TablePlaque";
 import { TableTools } from "./TableTools";
+import { useVoteReveal } from "./useVoteReveal";
+import { voteStageClassName, VoteStageContent } from "./VoteStage";
 
 /**
  * 大牌桌（圆桌剧场 v3「信息上桌」，中列视觉主体）：
@@ -120,6 +126,42 @@ export function SeatRing({
   const chipMap = deathChips(vi);
   const own = ownRoleBadge(vi);
 
+  // 投票揭示状态机：新 vote_resolved → reveal 舞台 + felt 金脉冲 + 既有标记退让。
+  const { reveal, calming } = useVoteReveal(vi);
+  const latestSpeechSeq = latestSpeech?.seq ?? -1;
+  // reveal 失效：进夜/进投票，或出现 seq 更晚的发言（遗言/拉票一来即让位）。
+  const revealActive =
+    reveal !== null &&
+    !isVoting &&
+    phase !== "night_action" &&
+    reveal.day === vi.round.day &&
+    latestSpeechSeq < reveal.seq;
+
+  // 票数角标：只在 vote_resolved 之后、且未进入下一轮投票/夜晚时渲染
+  // （入夜自动清、加赛 veil 自动清首轮）——投票进行中座位环零 vote 标记（保密红线）。
+  const lastRes: Resolved | undefined = [...collectResolved(vi).values()].sort(
+    (a, b) => b.seq - a.seq,
+  )[0];
+  const badgesOn =
+    Boolean(lastRes) &&
+    lastRes.day === vi.round.day &&
+    !isVoting &&
+    phase !== "night_action";
+  // 平票候选公开双环：tie 结算后、加赛落锤前。
+  const tiedIds = new Set<string>();
+  if (
+    lastRes &&
+    lastRes.outcome === "tie" &&
+    (phase === "tie_speech" || phase === "tie_vote")
+  ) {
+    const max = Math.max(0, ...Object.values(lastRes.tally));
+    for (const [id, n] of Object.entries(lastRes.tally)) {
+      if (n === max) {
+        tiedIds.add(id);
+      }
+    }
+  }
+
   // ❔ 图例：首枚私密 token 落桌时单次呼吸提醒。
   const [legendOpen, setLegendOpen] = useState(false);
   const [legendRemind, setLegendRemind] = useState(false);
@@ -135,10 +177,16 @@ export function SeatRing({
     return undefined;
   }, [hasTokens]);
 
+  let badgeIndex = 0;
+
   return (
     <div className="table-wrap" aria-label="牌桌">
-      <div className={`table${isVoting ? " veiled" : ""}`}>
-        <div className="felt" />
+      <div
+        className={`table${isVoting ? " veiled" : ""}${
+          revealActive && calming ? " revealing" : ""
+        }`}
+      >
+        <div className={`felt${revealActive && calming ? " pulse" : ""}`} />
         <TablePlaque phase={phase} vi={vi} spectating={spectating} />
         <Stage
           isVoting={isVoting}
@@ -147,17 +195,28 @@ export function SeatRing({
           isNight={isNight}
           thinking={thinking}
           latestSpeech={latestSpeech}
+          reveal={revealActive ? reveal : null}
+          vi={vi}
         />
         {seats.map((s, i) => {
           const pos = seatPos(i, total);
+          const tied = tiedIds.has(s.playerId);
           const cls = [
             "seat",
             s.alive ? "" : "dead",
             s.speaking ? "speaking" : "",
+            tied ? "tied" : "",
             pos.y < 50 ? "s-top" : "s-bot",
           ]
             .filter(Boolean)
             .join(" ");
+          const voteCount = badgesOn ? lastRes?.tally[s.playerId] : undefined;
+          // 揭示动画帧：角标按座位序 1.3s 起 60ms 逐个弹出；直出帧（刷新恢复）0s。
+          const badgeDelay =
+            revealActive && calming ? 1.3 + badgeIndex * 0.06 : 0;
+          if (voteCount) {
+            badgeIndex += 1;
+          }
           return (
             <div
               key={s.playerId}
@@ -167,7 +226,21 @@ export function SeatRing({
             >
               <div className="avwrap">
                 <Avatar seat={s.seat} className="avatar" />
-                {s.isViewer ? <span className="badge you">你</span> : null}
+                {s.isViewer ? (
+                  <span className="badge you">你</span>
+                ) : tied ? (
+                  <span className="badge tie">平</span>
+                ) : null}
+                {voteCount ? (
+                  <span
+                    className={`vote-badge${
+                      lastRes?.exiledPlayerId === s.playerId ? " exiled" : ""
+                    }`}
+                    style={{ "--d": `${badgeDelay.toFixed(2)}s` } as CSSProperties}
+                  >
+                    {voteCount}
+                  </span>
+                ) : null}
               </div>
               <div className="plate">
                 <div className="p-name">
@@ -275,6 +348,8 @@ function Stage({
   isNight,
   thinking,
   latestSpeech,
+  reveal,
+  vi,
 }: {
   isVoting: boolean;
   canVote: boolean;
@@ -282,6 +357,8 @@ function Stage({
   isNight: boolean;
   thinking?: ThinkingState | null;
   latestSpeech?: ChatMessage | undefined;
+  reveal: Resolved | null;
+  vi: VisibleInformationSnapshot;
 }) {
   const { key, className, content } = stageContent(
     isVoting,
@@ -290,6 +367,8 @@ function Stage({
     isNight,
     thinking,
     latestSpeech,
+    reveal,
+    vi,
   );
   return (
     <AnimatePresence mode="wait" initial={false}>
@@ -315,6 +394,8 @@ function stageContent(
   isNight: boolean,
   thinking: ThinkingState | null | undefined,
   latestSpeech: ChatMessage | undefined,
+  reveal: Resolved | null,
+  vi: VisibleInformationSnapshot,
 ): { key: string; className: string; content: ReactNode } {
   // ① 投票中：暗投幕布（零计票结构——保密红线，全部票向只在开票后出现）。
   if (isVoting) {
@@ -351,7 +432,16 @@ function stageContent(
     };
   }
 
-  // ② 夜晚：月幕。
+  // ② 开票揭示：得票榜 stagger + 宣判定格（失效判定在 SeatRing 里做）。
+  if (reveal) {
+    return {
+      key: `reveal-${reveal.eventId}`,
+      className: voteStageClassName(reveal),
+      content: <VoteStageContent reveal={reveal} vi={vi} />,
+    };
+  }
+
+  // ③ 夜晚：月幕。
   if (isNight) {
     return {
       key: "night",
@@ -366,7 +456,7 @@ function stageContent(
     };
   }
 
-  // ③ AI 思考中（非匿名）：显示其头像 + 「正在<任务>」。
+  // ④ AI 思考中（非匿名）：显示其头像 + 「正在<任务>」。
   if (thinking && !thinking.anonymous && thinking.seat) {
     const task = TASK_THINKING_LABEL[thinking.taskType] ?? "行动";
     return {
@@ -384,7 +474,7 @@ function stageContent(
     };
   }
 
-  // ④ 否则展示最近一条发言。
+  // ⑤ 否则展示最近一条发言。
   if (latestSpeech?.speakerSeat) {
     return {
       key: `speech-${latestSpeech.id}`,

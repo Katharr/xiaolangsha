@@ -96,6 +96,13 @@ export function ActionArea({
     return found ? `${found.name}（${found.seat}号）` : "某玩家";
   };
 
+  const seatOf = (id: string): number | undefined =>
+    (
+      vi?.alivePlayers.find((p) => p.playerId === id) ??
+      vi?.deadPlayers.find((p) => p.playerId === id)
+    )?.seat;
+
+  // data-aim：hover 时联动牌桌对应座位的金色瞄准环（纯空间对齐，零新增信息）。
   const targetButtons = (targets: string[]) => (
     <div className="target-grid">
       {targets.map((id) => (
@@ -104,6 +111,7 @@ export function ActionArea({
           key={id}
           className={selectedTarget === id ? "target selected" : "target"}
           disabled={busy}
+          data-aim={seatOf(id)}
           onClick={() => setSelectedTarget(id)}
         >
           {labelOf(id)}
@@ -481,10 +489,33 @@ export function ActionArea({
     case "vote":
     case "tie_vote": {
       const action = vi?.legalActions.find((a) => a.actionType === "vote");
+      const voteRound = phase === "tie_vote" ? "tie_break" : "first";
       if (!action || !vi?.canAct) {
+        // 已投出：蓝灰确认条——投票期间全页唯一出现「你投了谁」的地方（保密口径）。
+        const myVote = vi?.votes.find(
+          (v) =>
+            v.day === vi.round.day &&
+            v.voteRound === voteRound &&
+            v.voterId === humanPlayerId,
+        );
+        if (myVote) {
+          return wrap(
+            <div className="vote-confirm">
+              <span className="vc-main nb">
+                ✓ 已投出：
+                {myVote.choiceType === "abstain"
+                  ? "弃票"
+                  : labelOf(myVote.targetId ?? "")}
+                （暗投，开票时公示）
+              </span>
+              <span className="vc-sub nb">
+                等待其他玩家投票… 你的票只有你自己可见
+              </span>
+            </div>,
+          );
+        }
         return wrap(<p className="action-hint">等待其他玩家投票…</p>);
       }
-      const voteRound = phase === "tie_vote" ? "tie_break" : "first";
       const submitVote = (target: string | null) => {
         if (target) {
           act({
