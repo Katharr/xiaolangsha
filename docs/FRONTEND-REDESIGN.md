@@ -6,8 +6,11 @@
 > 早期两列稿 `wolfcha-mockup-balanced.html` 仅作历史参考。逻辑层（store/rules/shared）
 > 一行不动，只改/扩 UI 层。
 >
-> **进度**：阶段 0（token+深色）✅、阶段 1（环形牌桌+SeatRing+Roster+StatusBar 瘦身）✅、阶段 1.5（三列骨架 + 信息面板私密/公开 + 统一 PlayerName 着色）✅、阶段 2（DiceBear 头像）✅、阶段 3（天黑/天亮过场 + 舞台高亮进出，framer-motion）✅、主页 HomeScreen ✅、**选身份页 RoleSelectScreen ✅** 已落地。
-> **下一步 = 阶段 4：投票可视化**，见下「阶段 4」。
+> **进度**：阶段 0（token+深色）✅、阶段 1（环形牌桌）✅、阶段 1.5（三列骨架）✅、阶段 2（DiceBear 头像）✅、阶段 3（天黑/天亮过场）✅、主页 HomeScreen ✅、选身份页 RoleSelectScreen ✅、**阶段 4（圆桌剧场 v3：投票可视化 + 布局重排 + 信息上桌）✅** 已全部落地。
+> **⚠️ 布局已升级为「圆桌剧场」单行三列**（预览基准改为 `preview/vote-mockup-v3.html`，经 v1→v2a/v2b→v3 三轮用户评审拍板）：
+> 左「过程档案」窄列｜中「大牌桌」视觉主体（座位铭牌+桌心铭牌）｜右「发言流+操作」。
+> 顶部状态条 StatusBar 与场上速览 Roster 已删除（信息拆迁进牌桌，见下「阶段 4」）。
+> **下一步 = 阶段 5：复盘时间线**，见下「阶段 5」。
 
 ## Context（为什么做）
 
@@ -197,8 +200,39 @@ serif 标题（衬体字，用于阶段/字幕） + sans 正文
   - CSS 加在 `App.css` 末尾（`.phase-transition`/`.lid`/`.phase-caption` + `prefers-reduced-motion` 降级）。
   - 基线：`tsc -b` ✅ / `npm test` 132 绿 ✅ / `npm run build` ✅（bundle 761KB→890KB，gzip 297KB，单机可接受）。
   - **下一步 = 阶段 4（投票可视化）**，见下。
-- **阶段 4** — 投票可视化：投票/平票相位在 SeatRing 或面板上渲染票数（柱/箭头/环上连线），
-  数据取现有 `vote_submitted`/`vote_resolved`（不改规则层）。
+- **阶段 4** ✅ 已落地 — **圆桌剧场 v3：投票可视化 + 大牌桌布局重排 + 信息上桌**（分 4 个提交，
+  预览基准 `preview/vote-mockup-v3.html`，其内注释是全部落地纪律的权威来源；v1/v2a/v2b 稿留档）：
+  1. **外壳换骨**：grid 改单行三列 `clamp(228px,16vw,264px) minmax(520px,1fr) clamp(400px,30vw,520px)`、
+     areas `"info table chat"`；牌桌居中 `width:min(100%, calc(100dvh - var(--chrome-h)), 880px)`
+     + `aspect-ratio:1` + container query 分档（≤560px 小档铭牌，920px @media 双保险）。
+     操作/输入区折进右列 `.chat` 底部。**StatusBar/Roster/chat-head 删除**，信息拆迁：
+     相位/轮次/存活→桌心铭牌 `TablePlaque`（夜晚吃 nightStatus 播报、投票转蓝灰、旁观缀灰 tag）；
+     你是:角色→own 座位角色胶囊 `.tk-role`（aria-label 供测试断言）；重开/导出→牌桌左下
+     `TableTools` 幽灵钮（复盘态 ReviewPanel 自带新局、halt-banner 内嵌导出兜底）。
+  2. **信息上桌**（`src/ui/seatTokens.ts` = viewer 作用域纯 selector，ISO-001 核心）：
+     座位铭牌徽标行 = 私密圆 token（查验狼/好、狼队、未得手刀、救/毒、守）+ own 胶囊
+     （女巫附药剂 pip）+ 公开死因胶囊（`逐·天N ×票数`）。纪律：**得手的刀不挂**（死因牌已表达）、
+     **毒 token 与死因牌同帧**（目标死于 poison 才挂）、私密 tooltip 一律缀「仅你可见」、
+     四角制度（右上=你/平、左上=票数、右下永久留空）、max3+N 溢出兜底。
+     InfoPanel 收缩为「过程档案」两节：🌙夜报（只收无座位锚点/有私密增量的流水）+ 🗳️投票记录
+     （`VoteFlow` 票流图：voter 叠瓦 chips→目标+计数条，三态横幅）。**信息不重复：上桌即从面板删**。
+     ❔图例 `TableLegend` 按 viewer 过滤 + 首枚 token 单次呼吸提醒。
+  3. **投票揭示状态机**（保密红线 = 投票中零计票结构，见记忆 vote-secrecy-rule）：
+     舞台优先级 **veil(vote/tie_vote) → reveal → night → thinking → speech → idle**——投票态必须
+     排在 isNight 之前（修「AI 并发暗投匿名思考把白天顶成月幕」的 bug，`thinking.anonymous &&
+     taskType!=="vote"` 才算夜）。`useVoteReveal`：已见 eventId 集合放 ref、**首帧全部记已见不播动画**
+     （Dexie 刷新恢复直出终态）、连发只播 seq 最大一条、calming 2.6s 退让（既有 token 降透明 +
+     felt 金脉冲）。票数/票向唯一公开点 = `vote_resolved` payload（`VisibleVote.tally` 恒 undefined、
+     弃票数 payload.votes 的 abstain）。票数角标入夜自动清、加赛自动清首轮；平票候选双环+「平」角标。
+     ActionArea 已投确认条从 `vi.votes` 找自己那票（结算前本就只见自己的票，刷新可恢复零本地 state）。
+  4. **hover 联动 + 回归**：document 级事件委托（`data-seat-link`→`.seat.hl` 外晕、
+     `data-aim`→`.aim` 瞄准环、`.tt` tap 切换 tooltip），不提升 state。
+  - 新文件：`table.css`（牌桌全部样式）/ `TablePlaque` / `TableTools` / `TableLegend` /
+    `seatTokens(.test)` / `VoteFlow` / `VoteStage` / `useVoteReveal`；删除 `StatusBar.tsx`、Roster 导出。
+  - 测试：App.test 断言迁移（`getByLabelText("你的身份：村民")` + 铭牌存活计数）；
+    `seatTokens.test.ts` 四视角 token 互斥 + tooltip 纪律 + ×N 口径。反泄露正则 `/狼人|预言家/` 保留有效。
+  - 已知口径：死因牌向全场公开死法（刀/毒），与引擎既有契约一致（原死亡公告即公开「被毒杀」）；
+    若要收紧「夜死不公布死法」需改引擎口径，另议。
 - **阶段 5** — 复盘时间线：`ReviewPanel` 从 6 平铺列表重构成按「夜/天 轮次」分组的可点/可拖时间轴，
   复用 `reviewContext`，AI 追问保留。
 - **阶段 6** — 打磨 + 回归：toast/loading 反馈、错误更显眼；响应式 + 5/7 人全回归；

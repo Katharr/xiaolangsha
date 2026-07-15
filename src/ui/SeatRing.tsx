@@ -162,6 +162,50 @@ export function SeatRing({
     }
   }
 
+  // 记录↔座位 hover 联动（document 级事件委托，避免把高频 hover 提升成 App 级
+  // state）：带 data-seat-link 的档案条目/开票 chips → 座位 .hl 外晕；
+  // 操作区 data-aim target 按钮 → 座位 .aim 金色瞄准环。触屏 tap 切换 tooltip。
+  // .hl/.aim 是纯视觉、无语义状态，直接 DOM 操作属 scrollIntoView 类逃逸。
+  useEffect(() => {
+    const seatEl = (seat: string | undefined) =>
+      seat ? document.querySelector(`.seat[data-seat="${seat}"]`) : null;
+    const toggle = (e: Event, on: boolean) => {
+      const t = e.target;
+      if (!(t instanceof Element)) {
+        return;
+      }
+      const link = t.closest<HTMLElement>("[data-seat-link]");
+      if (link) {
+        seatEl(link.dataset.seatLink)?.classList.toggle("hl", on);
+      }
+      const aim = t.closest<HTMLElement>("[data-aim]");
+      if (aim) {
+        seatEl(aim.dataset.aim)?.classList.toggle("aim", on);
+      }
+    };
+    const over = (e: Event) => toggle(e, true);
+    const out = (e: Event) => toggle(e, false);
+    const tap = (e: Event) => {
+      const t = e.target instanceof Element ? e.target.closest(".tt") : null;
+      document.querySelectorAll(".tt.tip-on").forEach((x) => {
+        if (x !== t) {
+          x.classList.remove("tip-on");
+        }
+      });
+      if (t) {
+        t.classList.toggle("tip-on");
+      }
+    };
+    document.addEventListener("mouseover", over);
+    document.addEventListener("mouseout", out);
+    document.addEventListener("click", tap);
+    return () => {
+      document.removeEventListener("mouseover", over);
+      document.removeEventListener("mouseout", out);
+      document.removeEventListener("click", tap);
+    };
+  }, []);
+
   // ❔ 图例：首枚私密 token 落桌时单次呼吸提醒。
   const [legendOpen, setLegendOpen] = useState(false);
   const [legendRemind, setLegendRemind] = useState(false);

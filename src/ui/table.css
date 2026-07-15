@@ -1052,6 +1052,82 @@ body.is-day .felt {
   }
 }
 
+/* 塌叠双保险：≤920px 单列态牌桌必 ≤420px（必中小档），用普通 @media 复写同一套
+   小档规则，兜住不支持 container query 的环境。 */
+@media (max-width: 920px) {
+  .seat {
+    width: 88px;
+  }
+  .seat .avatar {
+    width: 50px;
+    height: 50px;
+  }
+  .seat.dead .avatar::after {
+    font-size: 24px;
+  }
+  .plate {
+    max-width: 88px;
+    padding: 2px 5px 3px;
+  }
+  .p-name {
+    font-size: 11px;
+  }
+  .tk {
+    width: 15px;
+    height: 15px;
+    font-size: 9px;
+  }
+  .tk-role {
+    font-size: 9px;
+    height: 14px;
+    padding: 0 5px;
+  }
+  .dchip {
+    font-size: 9px;
+    height: 14px;
+    padding: 0 5px;
+  }
+  .seat .vote-badge {
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 14px;
+    border-radius: 8px;
+    left: -4px;
+    top: -4px;
+  }
+  .plaque {
+    gap: 7px;
+    padding: 5px 11px 6px;
+  }
+  .plaque .pq-round {
+    font-size: 13.5px;
+  }
+  .plaque .pq-phase {
+    font-size: 11px;
+  }
+  .plaque .pq-alive {
+    font-size: 10px;
+  }
+  .stage.reveal {
+    max-width: 270px;
+    padding: 10px 11px 11px;
+  }
+  .rv-row {
+    height: 26px;
+  }
+  .rv-name {
+    font-size: 11.5px;
+  }
+  .stg-title {
+    font-size: 15px;
+    letter-spacing: 3px;
+  }
+  .stage .spk-line {
+    font-size: 12px;
+  }
+}
+
 /* 可达性：reduce 时牌桌全部 stagger/scale/呼吸/脉冲一帧直出终态 */
 @media (prefers-reduced-motion: reduce) {
   .table *,
