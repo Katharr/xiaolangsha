@@ -895,7 +895,8 @@ body.is-day .felt {
   filter: none;
 }
 
-.lg-btn.remind {
+.lg-btn.remind,
+.tbl-tools .tool-btn.remind {
   animation: lgPulse 2s ease-in-out 1;
 }
 

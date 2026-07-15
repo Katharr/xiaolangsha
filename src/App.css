@@ -115,49 +115,6 @@
   gap: 14px;
 }
 
-/* 身份卡 */
-.idcard {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-}
-
-.idcard .id-av {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1.2rem;
-  border: 2px solid var(--gold);
-  flex: 0 0 auto;
-  background: var(--bg-3);
-}
-
-.idcard .id-name {
-  font-size: 0.92rem;
-}
-
-.idcard .id-role {
-  font-size: 0.8rem;
-  color: var(--ink-dim);
-  margin-top: 2px;
-}
-
-.fac.good {
-  color: var(--good);
-}
-
-.fac.wolf {
-  color: var(--danger);
-}
-
 /* 通用分节 */
 .psec {
   display: flex;
@@ -173,183 +130,6 @@
   letter-spacing: 1px;
 }
 
-/* 查验记录 */
-.chk {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  font-size: 0.82rem;
-}
-
-.chk .chk-night {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  flex: 0 0 auto;
-  width: 32px;
-}
-
-.chk .chk-av,
-.mate .m-av,
-.death-row .d-av {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.8rem;
-  border: 1px solid var(--line);
-  flex: 0 0 auto;
-  background: var(--bg-3);
-}
-
-.chk .chk-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.badge-good {
-  font-size: 0.7rem;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: #1f3328;
-  color: var(--good);
-  border: 1px solid #2c4a3a;
-  flex: 0 0 auto;
-}
-
-.badge-wolf {
-  font-size: 0.7rem;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: #3a1d18;
-  color: #e9a99c;
-  border: 1px solid #5a2c26;
-  flex: 0 0 auto;
-}
-
-/* 药剂状态 */
-.potion {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-}
-
-.potion.used {
-  opacity: 0.62;
-}
-
-.potion .p-ic {
-  font-size: 1.25rem;
-  flex: 0 0 auto;
-}
-
-.potion .p-main {
-  flex: 1;
-}
-
-.potion .p-main b {
-  font-size: 0.85rem;
-}
-
-.potion .p-sub {
-  font-size: 0.74rem;
-  color: var(--ink-faint);
-  margin-top: 1px;
-}
-
-.p-tag {
-  font-size: 0.7rem;
-  padding: 1px 9px;
-  border-radius: 10px;
-  flex: 0 0 auto;
-}
-
-.p-tag.ok {
-  background: #1f3328;
-  color: var(--good);
-  border: 1px solid #2c4a3a;
-}
-
-.p-tag.used {
-  background: var(--bg-3);
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-}
-
-.night-info {
-  font-size: 0.8rem;
-  color: var(--ink-dim);
-  padding: 9px 10px;
-  border-radius: 8px;
-  background: #2c2615;
-  border: 1px solid #4a3f1d;
-}
-
-/* 守护 / 击杀记录 */
-.logline {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  font-size: 0.82rem;
-}
-
-.logline .ln-night {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  flex: 0 0 auto;
-  width: 32px;
-}
-
-.logline .ln-main {
-  flex: 1;
-}
-
-/* 狼队成员行 */
-.mate {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  font-size: 0.82rem;
-}
-
-.mate .m-name {
-  flex: 1;
-}
-
-.mate .m-st {
-  font-size: 0.7rem;
-  color: var(--good);
-  flex: 0 0 auto;
-}
-
-.mate.dead .m-st {
-  color: #8a4036;
-}
-
-.mate.dead .pname-n {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-}
-
 .empty-note {
   font-size: 0.82rem;
   color: var(--ink-faint);
@@ -359,63 +139,6 @@
   background: var(--bg-1);
   border: 1px dashed var(--line);
   text-align: center;
-}
-
-/* 私密 / 公开 分隔 */
-.pub-divider {
-  height: 1px;
-  background: var(--line);
-  margin: 4px 0;
-  position: relative;
-}
-
-.pub-divider span {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--bg-1);
-  padding: 0 10px;
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  letter-spacing: 2px;
-}
-
-/* 死亡公告行 */
-.death-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  font-size: 0.82rem;
-}
-
-.death-row .d-when {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  flex: 0 0 auto;
-  width: 38px;
-}
-
-.death-row .d-av {
-  filter: grayscale(1) brightness(0.6);
-}
-
-.death-row .d-name {
-  flex: 1;
-}
-
-.death-row .d-cause {
-  font-size: 0.7rem;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: #2a1815;
-  color: #e0a89c;
-  border: 1px solid #5a2c26;
-  flex: 0 0 auto;
 }
 
 /* 投票记录：按「天」折叠的卡片 */
@@ -494,32 +217,170 @@
   margin: 2px 0 5px;
 }
 
-.vline {
+/* 夜报行（无座位锚点私密流水的兜底；hover 联动对应座位外晕） */
+.nrow {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
   font-size: 0.8rem;
-  padding: 2px 0;
-  flex-wrap: wrap;
+  cursor: default;
 }
 
-.vline .varr {
+.nrow:hover {
+  border-color: var(--ink-faint);
+}
+
+.nrow .n-when {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+}
+
+.nrow .n-extra {
   color: var(--ink-faint);
 }
 
-.vline .vabs {
-  color: var(--ink-faint);
+/* 票流图（voter 叠瓦 chips → 目标 + 计数条 + 数字；进行中零票向） */
+.slink {
+  display: contents;
 }
 
-.vr-result {
-  margin-top: 6px;
-  font-size: 0.76rem;
-  color: var(--gold);
-  font-weight: 600;
+.vf-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
+  padding: 3px 0;
+  font-size: 0.76rem;
+}
+
+.vf-chips {
+  display: flex;
+  padding-left: 5px;
+  flex: 0 0 auto;
+}
+
+.vf-chips .vfc {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-left: -5px;
+  border: 1px solid var(--bg-0);
+  background: var(--bg-3);
+  flex: 0 0 auto;
+}
+
+.vf-arr {
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.vf-tgt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+/* .vf-tgt 用 display:contents 挂联动锚点时退回普通布局 */
+.vf-tgt.slink {
+  display: flex;
+}
+
+.vf-tgt .vft {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-3);
+  flex: 0 0 auto;
+}
+
+.vf-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  min-width: 18px;
+}
+
+.vf-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--gold-soft), var(--gold));
+}
+
+.vf-row.exiled .vf-bar i {
+  background: linear-gradient(90deg, #8f3b2a, var(--danger));
+}
+
+.vf-n {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--gold);
+  min-width: 14px;
+  text-align: right;
+}
+
+.vf-row.abs .vf-n {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.vf-row.abs .vf-tgt {
+  color: var(--ink-faint);
+}
+
+.vf-row.abs .vfc {
+  filter: grayscale(1) brightness(0.7);
+}
+
+/* balance 会覆盖 .nb 的 nowrap（shorthand 重置 text-wrap-mode），
+   防拆词的 .nb 岛必须放在 banner 内层 span。 */
+.vf-banner {
+  margin-top: 6px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.vf-banner.exile {
+  background: #2c2615;
+  border: 1px solid #4a3f1d;
+  color: #e7d29a;
+}
+
+.vf-banner.tie {
+  background: var(--vote-bg);
+  border: 1px solid var(--vote-line);
+  color: var(--vote-ink);
+}
+
+.vf-pending {
+  font-size: 0.74rem;
+  color: var(--ink-faint);
+  padding: 3px 0;
+}
+
+.vf-mine {
+  font-size: 0.76rem;
+  color: var(--vote-ink);
+  padding: 2px 0;
 }
 
 /* 右列：发言流（唯一长滚动）+ 底部操作/输入区 */

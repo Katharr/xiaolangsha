@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import "./table.css";
@@ -7,8 +8,17 @@ import type { GamePhase, VisibleInformationSnapshot } from "../shared";
 import type { ChatMessage, ThinkingState } from "../store";
 
 import { Avatar } from "./Avatar";
-import { ROLE_DUTY, ROLE_LABEL, TASK_THINKING_LABEL } from "./labels";
+import { ROLE_LABEL, TASK_THINKING_LABEL } from "./labels";
 import { PlayerName, bareName } from "./PlayerName";
+import {
+  deathChips,
+  ownRoleBadge,
+  privateSeatTokens,
+  type DeathChip,
+  type OwnRoleBadge,
+  type SeatToken,
+} from "./seatTokens";
+import { TableLegend } from "./TableLegend";
 import { TablePlaque } from "./TablePlaque";
 import { TableTools } from "./TableTools";
 
@@ -104,6 +114,27 @@ export function SeatRing({
   const canVote =
     vi.canAct && vi.legalActions.some((a) => a.actionType === "vote");
 
+  // 信息上桌：私密 token / own 角色胶囊 / 公开死因 chip 全部由 viewer 作用域
+  // selector 派生（ISO-001），座位组件只吃派生结果。
+  const tokenMap = privateSeatTokens(vi);
+  const chipMap = deathChips(vi);
+  const own = ownRoleBadge(vi);
+
+  // ❔ 图例：首枚私密 token 落桌时单次呼吸提醒。
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [legendRemind, setLegendRemind] = useState(false);
+  const remindedRef = useRef(false);
+  const hasTokens = tokenMap.size > 0;
+  useEffect(() => {
+    if (hasTokens && !remindedRef.current) {
+      remindedRef.current = true;
+      setLegendRemind(true);
+      const t = setTimeout(() => setLegendRemind(false), 2100);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [hasTokens]);
+
   return (
     <div className="table-wrap" aria-label="牌桌">
       <div className={`table${isVoting ? " veiled" : ""}`}>
@@ -147,59 +178,89 @@ export function SeatRing({
                     muted={!s.alive}
                   />
                 </div>
-                <SeatTokenRow seat={s} vi={vi} />
+                <SeatTokenRow
+                  tokens={tokenMap.get(s.playerId) ?? []}
+                  own={s.isViewer ? own : null}
+                  chip={chipMap.get(s.playerId) ?? null}
+                />
                 {s.speaking ? <div className="p-st nb">发言中</div> : null}
               </div>
             </div>
           );
         })}
-        <TableTools onNewGame={onNewGame} onExportDebug={onExportDebug} />
+        <TableLegend role={vi.ownRole} open={legendOpen} />
+        <TableTools
+          onToggleLegend={() => setLegendOpen((v) => !v)}
+          legendRemind={legendRemind}
+          onNewGame={onNewGame}
+          onExportDebug={onExportDebug}
+        />
       </div>
     </div>
   );
 }
 
 /**
- * 座位铭牌徽标行（阶段一版：狼队友 token + own 角色胶囊）。
- * 私密 token 只从 vi.teammates / vi.ownRole 派生（ISO-001）；
- * 私密 tooltip 一律以「仅你可见」结尾。查验/救毒/死因等完整 token
- * 系统在阶段二由 seatTokens selector 接管。
+ * 座位铭牌徽标行：私密圆 token + own 角色胶囊（女巫附药剂 pip）+ 公开死因 chip。
+ * 溢出兜底：max 3 项，超出并作「+N」（理论峰值 = 私密1 + 胶囊1 + 死因1）。
  */
 function SeatTokenRow({
-  seat,
-  vi,
+  tokens,
+  own,
+  chip,
 }: {
-  seat: SeatModel;
-  vi: VisibleInformationSnapshot;
+  tokens: SeatToken[];
+  own: OwnRoleBadge | null;
+  chip: DeathChip | null;
 }) {
-  const tokens: ReactNode[] = [];
-  if (seat.isTeammate) {
-    tokens.push(
-      <span
-        key="mate"
-        className="tk tk-wolf tt"
-        data-tip="你的狼队友 · 仅你可见"
-      >
-        狼
-      </span>,
-    );
-  }
-  if (seat.isViewer) {
-    tokens.push(
+  const items: ReactNode[] = tokens.map((t, i) => (
+    <span key={`tk-${i}`} className={`tk tk-${t.kind} tt`} data-tip={t.tip}>
+      {t.ch}
+    </span>
+  ));
+  if (own) {
+    items.push(
       <span
         key="role"
-        className={`tk-role tt${vi.ownFaction === "werewolf_team" ? " wolfy" : ""}`}
-        data-tip={ROLE_DUTY[vi.ownRole]}
-        aria-label={`你的身份：${ROLE_LABEL[vi.ownRole]}`}
+        className={`tk-role tt${own.wolfy ? " wolfy" : ""}`}
+        data-tip={own.duty}
+        aria-label={`你的身份：${ROLE_LABEL[own.role]}`}
       >
-        {ROLE_LABEL[vi.ownRole]}
+        {ROLE_LABEL[own.role]}
+      </span>,
+    );
+    for (const p of own.pips) {
+      items.push(
+        <span
+          key={`pip-${p.kind}`}
+          className={`pip pip-${p.kind}${p.used ? " used" : ""} tt`}
+          data-tip={p.tip}
+        />,
+      );
+    }
+  }
+  if (chip) {
+    items.push(
+      <span key="dchip" className="dchip tt" data-tip={chip.tip}>
+        {chip.text}
+        {chip.xn ? <i className="xn">×{chip.xn}</i> : null}
       </span>,
     );
   }
-  if (tokens.length === 0) {
+  if (items.length === 0) {
     return null;
   }
-  return <div className="p-row">{tokens}</div>;
+  // 溢出兜底：pip 与胶囊算一组，这里按渲染节点数粗算即可。
+  if (items.length > 4) {
+    const extra = items.length - 3;
+    items.length = 3;
+    items.push(
+      <span key="more" className="tk tk-more">
+        +{extra}
+      </span>,
+    );
+  }
+  return <div className="p-row">{items}</div>;
 }
 
 /**
