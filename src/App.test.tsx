@@ -53,12 +53,15 @@ describe("App 聊天室 UI", () => {
     expect(screen.getByText("练习 / 自由局")).toBeInTheDocument();
   });
 
-  it("自由村民局可走到天亮播报，状态栏显示真人身份且不泄露 AI 身份", async () => {
+  it("自由村民局可走到天亮播报，铭牌显示真人身份且不泄露 AI 身份", async () => {
     const store = await renderApp();
     await startFreeVillager(store);
 
-    // 顶部状态栏显示真人自己的身份。
-    expect(screen.getByText("你是：村民")).toBeInTheDocument();
+    // own 座位铭牌的角色胶囊显示真人自己的身份（原顶部状态条的归宿）。
+    expect(screen.getByLabelText("你的身份：村民")).toBeInTheDocument();
+    // 桌心铭牌承载存活数（原顶部状态条/聊天头的归宿；「第 1 天」在消息流里也会出现，
+    // 用存活计数这个铭牌独有文案断言）。
+    expect(screen.getByText(/存活 \d+\/7/)).toBeInTheDocument();
     // ISO-001：局中不出现任何角色身份文本（AI 身份不可见）。
     expect(screen.queryByText(/狼人|预言家/)).toBeNull();
     // 已有主持人/系统消息入流。

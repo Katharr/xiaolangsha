@@ -1,6 +1,5 @@
-export { StatusBar } from "./StatusBar";
 export { MessageStream } from "./MessageStream";
-export { SeatRing, Roster } from "./SeatRing";
+export { SeatRing } from "./SeatRing";
 export { InfoPanel } from "./InfoPanel";
 export { PlayerName } from "./PlayerName";
 export { ActionArea } from "./ActionArea";

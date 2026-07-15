@@ -1,102 +1,29 @@
-/* 聊天室式 MVP：外壳固定在一个视口内，仅消息流内部滚动。
-   阶段 0：全部硬编码色改引用 ./ui/theme.css 的 design token，切深色复古主题。
-   布局（grid 结构、max-width）留到阶段 1 改方案 C，此处只换皮。 */
-/* 方案 C → 三列外壳：左信息列 | 中发言流+操作 | 右牌桌(紧凑)，顶部细条跨三列。 */
+/* 圆桌剧场 v3「信息上桌」：外壳固定在一个视口内，仅发言流内部滚动。
+   单行三列 = 左「过程档案」窄列 | 中「大牌桌」视觉主体 | 右「发言流+操作」。
+   顶部状态条与场上速览已删除——相位/轮次/存活进桌心铭牌，名单即座位铭牌，
+   重开/导出进牌桌左下工具钮。牌桌样式集中在 ./ui/table.css。 */
 .app-root {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   display: grid;
-  grid-template-columns: clamp(260px, 21vw, 330px) 1fr clamp(360px, 30vw, 500px);
-  grid-template-rows: auto 1fr auto;
-  grid-template-areas:
-    "top  top  top"
-    "info chat side"
-    "info ctrl side";
+  grid-template-columns: clamp(228px, 16vw, 264px) minmax(520px, 1fr) clamp(400px, 30vw, 520px);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "info table chat";
   background: var(--bg-1);
 }
 
-/* 单列态：模式选择 / 身份揭示（vi 为空）与复盘，无信息列 / 牌桌侧栏。 */
+/* 单列态：身份揭示前（vi 为空）与复盘，无档案列 / 牌桌。 */
 .app-root.is-solo {
   grid-template-columns: 1fr;
-  grid-template-areas:
-    "top"
-    "chat"
-    "ctrl";
-}
-
-/* 顶部状态细条 */
-.status-bar {
-  grid-area: top;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 11px 22px;
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--ink);
-  border-bottom: 1px solid var(--line);
-}
-
-.status-phase {
-  font-family: var(--serif);
-  font-size: 1.2rem;
-  letter-spacing: 2px;
-  color: var(--gold);
-}
-
-.status-round {
-  color: var(--ink-dim);
-  font-size: 0.9rem;
-}
-
-.status-role {
-  margin-left: auto;
-  font-size: 0.9rem;
-  color: var(--ink-dim);
-}
-
-.status-role::after {
-  content: "";
-}
-
-.status-tag {
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: var(--bg-3);
-  color: var(--gold);
-  font-size: 0.8rem;
-}
-
-/* 顶部细条右侧按钮：重开新局 / 导出日志。 */
-.status-debug,
-.status-newgame {
-  padding: 3px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg-3);
-  color: var(--ink-dim);
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.status-debug:hover,
-.status-newgame:hover {
-  color: var(--ink);
-  border-color: var(--gold);
-}
-
-/* 重开新局更显眼一点：金色描边。 */
-.status-newgame {
-  color: var(--gold);
-  border-color: rgba(216, 178, 90, 0.45);
+  grid-template-areas: "chat";
 }
 
 /* 自动流程异常停止时的浮层提示（不参与三列网格，固定在顶部居中）。 */
 .halt-banner {
   position: fixed;
-  top: 56px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 50;
@@ -116,6 +43,25 @@
 
 .halt-banner-icon {
   flex: none;
+}
+
+/* halt 提示内嵌的导出按钮（复盘态无牌桌工具钮时的兜底出口）。 */
+.halt-banner .halt-export {
+  flex: none;
+  align-self: center;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid #b5483f;
+  background: transparent;
+  color: #ffd9d2;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.halt-banner .halt-export:hover:not(:disabled) {
+  border-color: #ffd9d2;
+  filter: none;
 }
 
 /* ============ 统一玩家名字着色（PlayerName 组件） ============ */
@@ -576,19 +522,20 @@
   flex-wrap: wrap;
 }
 
-/* 左列：聊天头 + 消息流（唯一长滚动） */
+/* 右列：发言流（唯一长滚动）+ 底部操作/输入区 */
 .chat {
   grid-area: chat;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  border-left: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
 }
 
-.chat-head {
-  padding: 10px 22px;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.82rem;
-  color: var(--ink-dim);
+/* 单列态（入口/复盘）无邻列，不需要分界线。 */
+.app-root.is-solo .chat {
+  border-left: none;
+  background: transparent;
 }
 
 .app-main {
@@ -610,12 +557,12 @@
   font-size: 0.9rem;
 }
 
-/* 发言气泡：头像 + 气泡，自己靠右 */
+/* 发言气泡：头像 + 气泡，自己靠右。620px 上限防超宽窗口下长行。 */
 .chat-row {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  max-width: 85%;
+  max-width: min(92%, 620px);
 }
 
 .chat-row-self {
@@ -770,9 +717,8 @@
   color: #e0a89c;
 }
 
-/* 操作区 + 输入区（左列底部，跨聊天列宽） */
+/* 操作区 + 输入区（折在右列发言流底部） */
 .app-controls {
-  grid-area: ctrl;
   border-top: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.22);
 }
@@ -953,289 +899,6 @@ button.target.selected {
   align-self: flex-start;
 }
 
-/* ============ 右列：紧凑牌桌 + 场上速览（贯通 chat+ctrl 两行高） ============ */
-.side {
-  grid-area: side;
-  border-left: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.18);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.table-wrap {
-  position: relative;
-  padding: 18px 14px 10px;
-}
-
-/* 牌桌做成正方形并居中：圆桌在任意列宽下都是正圆，不随右列宽被拉成椭圆。 */
-.table {
-  position: relative;
-  width: min(100%, 360px);
-  aspect-ratio: 1 / 1;
-  margin: 0 auto;
-}
-
-.felt {
-  position: absolute;
-  inset: 5%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, #2b3a2f 0%, #223026 70%, #1b271e 100%);
-  border: 1px solid #34433a;
-  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.55), var(--shadow);
-}
-
-body.is-day .felt {
-  background: radial-gradient(closest-side, #34442f 0%, #2a3826 70%, #232f20 100%);
-}
-
-/* 中央舞台 = 当前发言者（高信息密度，不再是空毡） */
-.stage {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 46%;
-  max-width: 230px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-}
-
-.stage .spk-av {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1.6rem;
-  border: 2px solid var(--gold);
-  box-shadow: 0 0 0 3px rgba(216, 178, 90, 0.3), 0 0 18px rgba(216, 178, 90, 0.5);
-  background: var(--bg-3);
-}
-
-.stage .spk-name {
-  font-size: 0.88rem;
-  color: var(--gold);
-  font-weight: 600;
-}
-
-.stage .spk-line {
-  font-size: 0.8rem;
-  color: var(--ink-dim);
-  line-height: 1.5;
-  max-height: 4.5em;
-  overflow: hidden;
-}
-
-/* 夜晚态：舞台显示月球 + 提示 */
-.stage.night .spk-av {
-  border-color: #7d8bb0;
-  box-shadow: 0 0 18px rgba(140, 160, 210, 0.45);
-  background: radial-gradient(circle at 35% 30%, #cfd6e6, #6b7691);
-}
-
-/* 座位 */
-.seat {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 92px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  text-align: center;
-}
-
-.seat .avatar-wrap {
-  position: relative;
-}
-
-.seat .avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1.1rem;
-  background: var(--bg-3);
-  border: 2px solid var(--line);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  transition: var(--t-fast);
-}
-
-.seat .nm {
-  font-size: 0.75rem;
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-.seat .nm .no {
-  color: var(--ink-faint);
-}
-
-.seat .st {
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-}
-
-.seat .badge {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  font-size: 0.56rem;
-  padding: 0 4px;
-  border-radius: 7px;
-  line-height: 14px;
-  border: 1px solid var(--line);
-}
-
-.seat .badge.you {
-  background: var(--gold);
-  color: #2a210c;
-  border-color: var(--gold);
-}
-
-.seat .badge.wolf {
-  background: #4a2622;
-  color: #e9a99c;
-  border-color: #6a382f;
-}
-
-.seat.speaking .avatar {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px rgba(216, 178, 90, 0.4), 0 0 14px rgba(216, 178, 90, 0.5);
-  transform: scale(1.07);
-}
-
-.seat.speaking .st,
-.seat.speaking .nm {
-  color: var(--gold);
-}
-
-.seat.dead .avatar {
-  filter: grayscale(1) brightness(0.5);
-  border-color: #2c2820;
-  position: relative;
-}
-
-.seat.dead .avatar-wrap::after {
-  content: "✕";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: rgba(220, 90, 70, 0.85);
-  font-size: 1.6rem;
-  font-weight: 700;
-  pointer-events: none;
-}
-
-.seat.dead .nm {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-}
-
-.seat.dead .st {
-  color: #8a4036;
-}
-
-/* 场上速览：紧凑名单 */
-.roster {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 16px 14px;
-  border-top: 1px solid var(--line);
-}
-
-.roster h4 {
-  margin: 10px 2px 7px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--ink-faint);
-  letter-spacing: 1px;
-}
-
-.rrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border-radius: 8px;
-  font-size: 0.84rem;
-}
-
-.rrow:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.rrow .ra {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  border: 1px solid var(--line);
-  flex: 0 0 auto;
-  background: var(--bg-3);
-}
-
-.rrow .rn {
-  flex: 1;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rrow .rn .no {
-  color: var(--ink-faint);
-}
-
-.rrow .rs {
-  font-size: 0.7rem;
-  color: var(--good);
-  flex: 0 0 auto;
-}
-
-.rrow.dead .ra {
-  filter: grayscale(1) brightness(0.5);
-}
-
-.rrow.dead .rn {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-}
-
-.rrow.dead .rs {
-  color: #8a4036;
-}
-
-.rrow .tagy {
-  font-size: 0.56rem;
-  padding: 0 4px;
-  border-radius: 6px;
-  background: var(--gold);
-  color: #2a210c;
-}
-
-.rrow .tagw {
-  font-size: 0.56rem;
-  padding: 0 4px;
-  border-radius: 6px;
-  background: #4a2622;
-  color: #e9a99c;
-}
-
 /* 加载遮罩 */
 .app-loading {
   position: absolute;
@@ -1262,59 +925,56 @@ body.is-day .felt {
 
 /* ============ 响应式安全网（深度打磨归阶段 6，这里先保证各尺寸不崩） ============ */
 
-/* 中等屏：收窄两侧列，给中间发言流留宽。 */
+/* 中等屏：收窄两侧列，给中间牌桌留宽（牌桌自身有高度预算封顶）。 */
 @media (max-width: 1180px) {
   .app-root:not(.is-solo) {
-    grid-template-columns: clamp(220px, 23vw, 280px) 1fr clamp(300px, 30vw, 390px);
-  }
-  .table {
-    width: min(100%, 300px);
+    grid-template-columns: clamp(200px, 17vw, 230px) minmax(0, 1fr) clamp(330px, 30vw, 400px);
   }
 }
 
-/* 窄屏 / 竖屏：三列塌成单列堆叠（顶条 → 牌桌 → 信息列 → 发言流 → 操作区）。
-   信息列与牌桌各自限高滚动，发言流仍占主滚动区。信息列响应式深化留阶段 6。 */
+/* 窄屏 / 竖屏：三列塌成单列堆叠（牌桌 → 发言流 → 档案列），整页滚动。
+   牌桌 ≤420px 自动落 container query 小档铭牌；发言流仍是主内容。 */
 @media (max-width: 920px) {
   .app-root:not(.is-solo) {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(60vh, auto) auto;
     grid-template-areas:
-      "top"
-      "side"
-      "info"
+      "table"
       "chat"
-      "ctrl";
+      "info";
   }
   .app-root:not(.is-solo) .info {
     border-right: none;
     border-top: 1px solid var(--line);
-    max-height: 40vh;
   }
-  .app-root:not(.is-solo) .side {
+  .app-root:not(.is-solo) .chat {
     border-left: none;
-    border-top: 1px solid var(--line);
-    max-height: 46vh;
+  }
+  .app-root:not(.is-solo) .app-controls {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: var(--bg-1);
   }
   .table {
-    width: min(60vw, 260px);
+    width: min(100vw - 24px, 420px);
   }
   .table-wrap {
-    padding: 12px 14px 6px;
+    padding: 10px;
   }
 }
 
 /* 极窄屏：进一步压缩内边距，按钮/输入区不溢出。 */
 @media (max-width: 480px) {
-  .status-bar,
-  .chat-head,
   .app-main,
   .action-area,
   .text-input {
     padding-left: 14px;
     padding-right: 14px;
-  }
-  .table {
-    width: min(70vw, 220px);
   }
   .chat-row,
   .chat-row-self {

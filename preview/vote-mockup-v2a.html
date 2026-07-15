@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 投票可视化 v2A（右翼主桌 · 暗投幕布）</title>
+<style>
+  /* ===========================================================
+     投票可视化 v2 变体 A「右翼主桌」—— 基于 vote-mockup.html 素材库改造。
+     两条最高优先级反馈的落实：
+       1. 投票全程保密：投票中舞台无任何候选/票位/计数结构（.stage.veil 暗投幕布），
+          真人票向唯一出口 = 操作区 .vote-confirm；全部票向只在 vote_resolved 一次性开票。
+       2. 牌桌变大：右列 30vw→40vw（480~720px）、整列全高只放牌桌，
+          速览压成小头像 chips 挪入左列公开面板；牌桌 felt 直径约 456~620px（现状约 297px）。
+     高度预算统一走 --chrome-h 变量：.table 三重守卫 min(100%, calc(100dvh-chrome), 硬上限)。
+     纯静态假数据，7 人标准局。动画全用 CSS 模拟，落地 src/ 时对应 framer-motion。
+     =========================================================== */
+  :root {
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:14px; --radius-sm:9px; --shadow:0 6px 22px rgba(0,0,0,.45); --t-fast:.18s; --t-mid:.35s;
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    /* 投票蓝灰视觉系（与 .notice.vote / .vd-head 同源） */
+    --vote-bg:#1d2530; --vote-line:#2f3f55; --vote-ink:#b9cbe2;
+    /* 高度预算常量：demo-bar 39 + topbar ≈45 + table-wrap 上下 padding 32 + 呼吸余量 34 */
+    --chrome-h:150px;
+  }
+  body.is-day { --bg-0:#1c1810; --bg-1:#28221a; --bg-2:#322a20; --bg-3:#3b3226; --ink:#f4ecda; }
+  * { box-sizing:border-box; } html,body{ height:100%; margin:0; }
+  body{ background:radial-gradient(1400px 700px at 50% -15%, #2a2418 0%, transparent 60%), var(--bg-0);
+        color:var(--ink); font-family:var(--sans); overflow:hidden; }
+  .nb{ white-space:nowrap; } /* 文案排版红线：意群防拆词 */
+
+  .demo-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:39px; padding:0 14px;
+    background:#0d0b07; border-bottom:1px solid var(--line); font-size:13px; color:var(--ink-dim); }
+  .demo-bar strong{ color:var(--gold); font-weight:600; } .demo-bar .spacer{ flex:1; }
+  .demo-bar button{ font:inherit; font-size:12.5px; cursor:pointer; padding:5px 10px; border-radius:8px; border:1px solid var(--line); background:var(--bg-3); color:var(--ink); }
+  .demo-bar button:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .demo-bar button.on{ background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; border-color:var(--gold-soft); }
+  .demo-bar button:disabled{ opacity:.4; cursor:default; }
+  .demo-bar button:disabled:hover{ border-color:var(--line); color:var(--ink); }
+
+  /* ============ 外壳（v2A：左列 18vw / 中列 minmax(430px,1fr) / 右列 40vw 全高牌桌） ============ */
+  .frame{
+    height:calc(100vh - 39px); display:grid;
+    grid-template-columns: clamp(240px,18vw,300px) minmax(430px,1fr) clamp(480px,40vw,720px);
+    grid-template-rows: auto minmax(0,1fr) auto;
+    grid-template-areas:
+      "top  top  top"
+      "info chat side"
+      "info ctrl side";
+  }
+  .topbar{ grid-area:top; display:flex; align-items:center; gap:16px; padding:11px 22px;
+    border-bottom:1px solid var(--line); background:rgba(0,0,0,.25); }
+  .topbar .phase{ font-family:var(--serif); font-size:19px; letter-spacing:2px; color:var(--gold); text-wrap:balance; }
+  .topbar .round{ color:var(--ink-dim); font-size:14px; }
+  .topbar .alive{ color:var(--ink-dim); font-size:13px; } /* 「存活 x/y」并入状态条，chat-head 整条删除省 40px */
+  .topbar .alive b{ color:var(--gold); font-weight:600; }
+  .topbar .role{ margin-left:auto; font-size:14px; color:var(--ink-dim); } .topbar .role b{ color:var(--gold); }
+
+  /* ============ 首字色块头像占位（静态稿不引 DiceBear） ============ */
+  .pav{ display:inline-grid; place-items:center; border-radius:50%; background:var(--bg-3); color:#1b1610;
+    font-weight:700; border:1px solid var(--line); flex:0 0 auto; user-select:none; overflow:hidden; }
+
+  /* ============ 左：信息面板 ============ */
+  .info{ grid-area:info; border-right:1px solid var(--line); background:rgba(0,0,0,.22);
+         display:flex; flex-direction:column; min-height:0; }
+  .info-head{ padding:11px 16px; border-bottom:1px solid var(--line); font-size:12.5px; color:var(--ink-faint); letter-spacing:1px; }
+  .info-head b{ color:var(--gold); font-weight:600; }
+  .info-body{ flex:1; overflow-y:auto; padding:14px 14px 18px; display:flex; flex-direction:column; gap:14px; }
+
+  .idcard{ display:flex; align-items:center; gap:11px; padding:11px; border-radius:var(--radius-sm);
+    background:var(--bg-2); border:1px solid var(--line); }
+  .idcard .id-av{ border:2px solid var(--gold) !important; }
+  .idcard .id-name{ font-size:14.5px; font-weight:600; }
+  .idcard .id-role{ font-size:12.5px; color:var(--ink-dim); margin-top:2px; }
+  .fac.good{ color:var(--good); }
+
+  .psec h4{ margin:2px 2px 9px; font-size:12.5px; font-weight:600; color:var(--ink-faint); letter-spacing:1px; }
+  .psec{ display:flex; flex-direction:column; gap:8px; }
+
+  .chk{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .chk .chk-night{ font-size:11px; color:var(--ink-faint); flex:0 0 auto; width:30px; }
+  .chk .chk-name{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .badge-wolf{ font-size:11px; padding:1px 8px; border-radius:10px; background:#3a1d18; color:#e9a99c; border:1px solid #5a2c26; }
+
+  .pub-divider{ height:1px; background:var(--line); margin:2px 0; position:relative; }
+  .pub-divider span{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:#191510; padding:0 10px; font-size:11px; color:var(--ink-faint); letter-spacing:2px; }
+
+  /* ---- 场上速览（v2A 新增）：从右列挪入，压成横排小头像 chips ----
+     信息降维取舍：丢全名/存活文字，title 悬停出全名；死亡明细由紧邻的死亡公告承担，
+     大牌桌本身就是一张更大的带全名名单。 */
+  .glance{ display:flex; flex-wrap:wrap; gap:7px 8px; }
+  .gchip{ position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; width:36px; cursor:default; }
+  .gchip .pav{ width:36px; height:36px; font-size:15px; }
+  .gchip.you .pav{ box-shadow:0 0 0 2px var(--gold); }
+  .gchip .gno{ font-size:10px; color:var(--ink-faint); line-height:1; }
+  .gchip.dead .pav{ filter:grayscale(1) brightness(.5); }
+  .gchip.dead::after{ content:"✕"; position:absolute; top:7px; left:50%; transform:translateX(-50%);
+    color:rgba(220,90,70,.9); font-weight:700; font-size:17px; pointer-events:none; }
+  .gchip.dead .gno{ text-decoration:line-through; }
+
+  .death-row{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; background:var(--bg-1); border:1px solid var(--line); font-size:13px; }
+  .death-row .d-when{ font-size:11px; color:var(--ink-faint); flex:0 0 auto; width:34px; }
+  .death-row .d-av{ filter:grayscale(1) brightness(.6); }
+  .death-row .d-name{ flex:1; color:var(--ink-dim); }
+  .death-row .d-cause{ font-size:11px; padding:1px 8px; border-radius:10px; background:#2a1815; color:#e0a89c; border:1px solid #5a2c26; flex:0 0 auto; }
+
+  /* ---- 投票记录：按天折叠卡 ---- */
+  .vote-day{ border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .vote-day + .vote-day{ margin-top:8px; }
+  .vd-head{ display:flex; align-items:center; gap:8px; padding:7px 11px; cursor:pointer; user-select:none;
+    background:var(--vote-bg); color:var(--vote-ink); font-size:12.5px; font-weight:600; }
+  .vd-head:hover{ background:#222d3b; }
+  .vd-arrow{ font-size:10px; color:var(--ink-faint); transition:transform var(--t-fast); flex:0 0 auto; }
+  .vote-day.open .vd-arrow{ transform:rotate(90deg); }
+  .vd-sum{ margin-left:auto; font-weight:400; font-size:11.5px; color:var(--ink-faint); }
+  .vd-body{ display:none; padding:4px 11px 10px; border-top:1px solid var(--vote-line); }
+  .vote-day.open .vd-body{ display:block; }
+  .vr{ padding:7px 0 3px; }
+  .vr + .vr{ border-top:1px dashed var(--line); }
+  .vr-sub{ font-size:11px; color:var(--ink-faint); letter-spacing:1px; margin:2px 0 6px; }
+
+  /* ---- 票流图（数据口径：票数只取 vote_resolved payload.tally；
+          弃票数 payload.votes 里 choiceType==='abstain'；结算前 vi.votes 只剩 viewer 自己一张）
+     保密口径（v2A 收紧）：pending 态连「你已投 X」也不显示——真人票向唯一出口是操作区确认条。 ---- */
+  .vf-row{ display:flex; align-items:center; gap:6px; padding:3px 0; font-size:12px; }
+  .vf-chips{ display:flex; padding-left:5px; flex:0 0 auto; }
+  .vf-chips .pav{ margin-left:-5px; border-color:var(--bg-0); }
+  .vf-arr{ color:var(--ink-faint); font-size:11px; flex:0 0 auto; }
+  .vf-tgt{ display:flex; align-items:center; gap:5px; flex:0 0 auto; white-space:nowrap; font-size:12px; }
+  .vf-bar{ flex:1; height:6px; border-radius:3px; background:rgba(0,0,0,.35); overflow:hidden; min-width:18px; }
+  .vf-bar i{ display:block; height:100%; border-radius:3px; background:linear-gradient(90deg,var(--gold-soft),var(--gold)); }
+  .vf-row.exiled .vf-bar i{ background:linear-gradient(90deg,#8f3b2a,var(--danger)); }
+  .vf-n{ flex:0 0 auto; font-size:12.5px; font-weight:700; color:var(--gold); min-width:14px; text-align:right; }
+  .vf-row.abs .vf-n{ color:var(--ink-faint); font-weight:400; }
+  .vf-row.abs .vf-tgt{ color:var(--ink-faint); }
+  .vf-banner{ margin-top:6px; padding:5px 9px; border-radius:7px; font-size:12px; font-weight:600; text-wrap:balance; }
+  .vf-banner.exile{ background:#2c2615; border:1px solid #4a3f1d; color:#e7d29a; }
+  .vf-banner.tie{ background:var(--vote-bg); border:1px solid var(--vote-line); color:var(--vote-ink); }
+  .vf-pending{ font-size:11.5px; color:var(--ink-faint); padding:3px 0; }
+  /* 演示⑤：整节高亮呼吸（引导视线到历史卡） */
+  .vote-sec.flash{ animation:secFlash 1.5s ease-out 2; border-radius:10px; }
+  @keyframes secFlash{ 0%{ box-shadow:0 0 0 0 rgba(216,178,90,0);} 30%{ box-shadow:0 0 0 3px rgba(216,178,90,.4);} 100%{ box-shadow:0 0 0 0 rgba(216,178,90,0);} }
+
+  /* ============ 中：发言流 ============ */
+  .chat{ grid-area:chat; display:flex; flex-direction:column; min-height:0; }
+  .stream{ flex:1; overflow-y:auto; padding:16px 22px; display:flex; flex-direction:column; gap:12px; }
+  /* 中列变宽（1fr），气泡上限 620px 防超宽长行 */
+  .row{ display:flex; gap:10px; align-items:flex-start; max-width:min(82%,620px); }
+  .row.self{ align-self:flex-end; flex-direction:row-reverse; }
+  .bubble{ background:var(--bg-2); border:1px solid var(--line); border-radius:12px; padding:8px 13px; line-height:1.55; }
+  .row.self .bubble{ background:#2f3a2a; border-color:#41502f; }
+  .bubble .who{ font-size:11.5px; font-weight:600; margin-bottom:1px; }
+  .bubble .tx{ font-size:14.5px; color:var(--ink); white-space:pre-wrap; }
+  .notice{ align-self:center; max-width:90%; display:flex; gap:8px; align-items:baseline; padding:6px 12px;
+    border-radius:10px; font-size:13px; line-height:1.5; background:var(--bg-2); border:1px solid var(--line); color:var(--ink-dim); }
+  .notice .ntag{ flex:0 0 auto; font-size:10.5px; font-weight:700; color:var(--ink-faint); }
+  .notice.host{ background:#20281f; border-color:#344029; }
+  .notice.vote{ background:var(--vote-bg); border-color:var(--vote-line); color:var(--vote-ink); }
+  .typing{ display:inline-flex; gap:3px; align-items:center; }
+  .typing .dot{ width:4px; height:4px; border-radius:50%; background:var(--gold-soft); animation:blink 1.2s infinite both; }
+  .typing .dot:nth-child(2){ animation-delay:.2s } .typing .dot:nth-child(3){ animation-delay:.4s }
+  @keyframes blink{ 0%,80%,100%{opacity:.2} 40%{opacity:1} }
+  ::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-thumb{ background:#3a3328; border-radius:8px; }
+
+  /* ============ 右：牌桌（v2A：整列全高独占，roster 已挪走） ============ */
+  .side{ grid-area:side; border-left:1px solid var(--line); background:rgba(0,0,0,.18);
+         display:flex; flex-direction:column; min-height:0; }
+  .table-wrap{ flex:1; min-height:0; display:grid; place-items:center; padding:16px; }
+  /* 三重守卫定圆：吃满列宽 / 高度预算 calc(100dvh - chrome) / 硬上限 720。
+     矮宽窗口被高度钳制时 place-items:center 居中，留白落在底色上。 */
+  .table{ position:relative; width:min(100%, calc(100dvh - var(--chrome-h)), 720px); aspect-ratio:1/1; }
+  .felt{ position:absolute; inset:5%; border-radius:50%;
+    background:radial-gradient(closest-side,#2b3a2f 0%,#223026 70%,#1b271e 100%);
+    border:1px solid #34433a; box-shadow:inset 0 0 60px rgba(0,0,0,.55), var(--shadow);
+    transition:box-shadow var(--t-mid), border-color var(--t-mid); }
+  body.is-day .felt{ background:radial-gradient(closest-side,#34442f 0%,#2a3826 70%,#232f20 100%); }
+  /* 投票保密期「压暗封桌」：felt 转蓝灰内辉 + 边线转 --vote-line；
+     开票瞬间辉光褪去 + reveal 展开，明暗对比放大揭示冲击力。 */
+  .table.veiled .felt{ border-color:var(--vote-line);
+    box-shadow:inset 0 0 90px rgba(47,63,85,.5), var(--shadow); }
+
+  /* ---- 中央舞台（AnimatePresence 通道：外层只动 opacity，translate 居中约定不破） ---- */
+  .stage{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:46%; max-width:300px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px;
+    animation:stageIn .28s ease-out both; }
+  @keyframes stageIn{ from{ opacity:0; } }
+  .stage .spk-av{ border:2px solid var(--gold) !important;
+    box-shadow:0 0 0 3px rgba(216,178,90,.3), 0 0 18px rgba(216,178,90,.5); }
+  .stage .spk-name{ font-size:15px; color:var(--gold); font-weight:600; }
+  .stage .spk-line{ font-size:13px; color:var(--ink-dim); line-height:1.5; max-height:4.5em; overflow:hidden; }
+
+  /* ---- 舞台 veil 暗投幕布态（v2A 替代旧 ballot 计票板，验收红线）----
+     零计票结构：不渲染任何候选人 / 票位 / 计数槽——视觉上不可能被读成实时计票。
+     结构 = 衬线标题 + 纯 CSS 微光投票匣 + typing 三点 + 一行「暗投进行中 · 开票时公示」。
+     注意 stage 优先级（落地必守）：投票判定必须排在 isNight 之前，
+     否则 AI 并发暗投的匿名思考会把幕布顶成「天黑请闭眼」。 ---- */
+  .stage.veil{ width:60%; max-width:320px; gap:9px; }
+  .vl-title{ font-family:var(--serif); font-size:21px; letter-spacing:6px; text-indent:6px;
+    color:var(--gold); text-wrap:balance; }
+  /* 纯 CSS 投票匣：金描边匣体 + 顶部投票口 + 一张缓缓落入的票（零 emoji） */
+  .vl-box{ position:relative; width:54px; height:40px; margin-top:14px;
+    border:2px solid var(--gold-soft); border-radius:7px;
+    background:linear-gradient(180deg, rgba(216,178,90,.08), rgba(216,178,90,.02));
+    animation:veilGlow 2.6s ease-in-out infinite; }
+  .vl-box::before{ content:""; position:absolute; left:50%; top:-2px; transform:translateX(-50%);
+    width:26px; height:4px; border-radius:2px; background:var(--gold-soft); }
+  .vl-box::after{ content:""; position:absolute; left:50%; top:-16px;
+    width:15px; height:10px; border:1.5px solid var(--gold); border-radius:2px;
+    background:rgba(216,178,90,.18); animation:ballotDrop 2.6s ease-in-out infinite; }
+  @keyframes veilGlow{
+    0%,100%{ box-shadow:0 0 10px rgba(216,178,90,.15); }
+    50%{ box-shadow:0 0 24px rgba(216,178,90,.42); } }
+  @keyframes ballotDrop{
+    0%{ transform:translateX(-50%) translateY(0) rotate(6deg); opacity:0; }
+    18%{ opacity:1; }
+    52%{ transform:translateX(-50%) translateY(13px) rotate(-2deg); opacity:1; }
+    64%,100%{ transform:translateX(-50%) translateY(15px) rotate(-2deg); opacity:0; } }
+  .vl-sub{ font-size:12.5px; color:var(--vote-ink); display:inline-flex; align-items:baseline; gap:6px; text-wrap:balance; }
+  .vl-note{ font-size:11.5px; color:var(--ink-faint); }
+
+  /* ---- 舞台 reveal 开票态（放大版吃大桌红利：340px / 行 30px / chips 20px / 宣判头像 72px）----
+     落地 src：framer-motion variants，父级 staggerChildren:0.12（行 y:6→0）、
+     行内 chips 再 staggerChildren:0.06（scale .4→1），宣判 +400ms（--dv）。
+     触发纪律（落地必守）：以「已见 eventId 集合」判新 vote_resolved，
+     revealHold≈2400ms 仅对当前 day+round 生效；Dexie 恢复时已存在事件直出终态不重播。 ---- */
+  .stage.reveal{ width:62%; max-width:340px; padding:12px 14px 13px; gap:4px;
+    background:rgba(20,17,12,.55); border:1px solid var(--vote-line); border-radius:var(--radius-sm); }
+  .rv-title{ font-family:var(--serif); font-size:16px; letter-spacing:3px; color:var(--gold); text-wrap:balance; }
+  .rv-list{ width:100%; display:flex; flex-direction:column; gap:3px; margin-top:5px; }
+  .rv-row{ display:flex; align-items:center; gap:8px; height:30px; width:100%;
+    animation:rvIn .22s ease-out both; animation-delay:var(--d,0s); }
+  @keyframes rvIn{ from{ opacity:0; transform:translateY(6px); } }
+  .rv-name{ font-size:13px; white-space:nowrap; }
+  .rv-chips{ display:flex; margin-left:auto; padding-left:6px; }
+  .rv-chips .pav{ margin-left:-6px; border-color:var(--bg-0); animation:popIn .2s ease-out both; animation-delay:var(--dc,0s); }
+  @keyframes popIn{ from{ opacity:0; transform:scale(.4); } }
+  .rv-n{ flex:0 0 auto; font-size:15px; font-weight:700; color:var(--gold); min-width:18px; text-align:right; }
+  .rv-row.abs .rv-n{ color:var(--ink-faint); font-weight:400; }
+  .rv-row.abs .rv-name{ color:var(--ink-faint); }
+  /* 宣判出现时榜单行压缩上移（exile 态）：30px → 22px */
+  .stage.reveal.exile .rv-row{ animation:rvIn .22s ease-out both, rvShrink .25s ease-out both;
+    animation-delay:var(--d,0s), var(--dv,1s); }
+  @keyframes rvShrink{ to{ height:22px; opacity:.72; } }
+  .rv-verdict{ margin-top:7px; display:flex; flex-direction:column; align-items:center; gap:6px;
+    animation:rvIn .28s ease-out both; animation-delay:var(--dv,1s); }
+  .rv-exile-av{ border:2px solid var(--danger) !important;
+    box-shadow:0 0 0 3px rgba(192,86,63,.3), 0 0 22px rgba(192,86,63,.45); }
+  .rv-ties{ display:flex; gap:12px; }
+  .rv-tie-av{ border:2px solid var(--gold) !important; animation:tie-pulse 1.2s ease-in-out infinite; }
+  @keyframes tie-pulse{ 0%,100%{ box-shadow:0 0 0 2px rgba(216,178,90,.35);} 50%{ box-shadow:0 0 0 6px rgba(216,178,90,.15);} }
+  .rv-verdict .vtext{ font-size:14.5px; font-weight:700; color:var(--gold); text-wrap:balance; line-height:1.5; }
+  .rv-verdict .vtext .dim{ color:var(--ink-dim); font-weight:400; }
+
+  /* ---- 座位（随桌径放大一档：seat 100 / avatar 60 / 名字 13 / 角标 20 / 死亡✕ 30） ---- */
+  .seat{ position:absolute; transform:translate(-50%,-50%); width:100px;
+    display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center; }
+  .seat .avatar{ width:60px; height:60px; border-radius:50%; background:var(--bg-3); border:2px solid var(--line);
+    overflow:hidden; position:relative; box-shadow:0 2px 8px rgba(0,0,0,.4); }
+  .seat .avatar .ch{ position:absolute; inset:0; display:grid; place-items:center; font-size:25px; font-weight:700; color:#1b1610; }
+  .seat .nm{ font-size:13px; color:var(--ink); white-space:nowrap; }
+  .seat .nm .no{ color:var(--ink-faint); }
+  .seat .st{ font-size:11.5px; color:var(--ink-faint); }
+  .seat .badge{ position:absolute; top:-4px; right:-4px; font-size:10px; padding:0 5px; border-radius:8px; line-height:16px; border:1px solid var(--line); z-index:2; }
+  .seat .badge.you{ background:var(--gold); color:#2a210c; border-color:var(--gold); }
+  .seat.dead .avatar{ filter:grayscale(1) brightness(.5); border-color:#2c2820; }
+  .seat.dead .avatar::after{ content:"✕"; position:absolute; inset:0; display:grid; place-items:center; color:rgba(220,90,70,.85); font-size:30px; font-weight:700; }
+  .seat.dead .nm{ color:var(--ink-faint); text-decoration:line-through; }
+  /* 票数角标：固定左上（右上留给 badge.you），vote_resolved 后出现、入夜随过场淡出。
+     落地 src：scale 0→1 var(--t-fast)、按座位序每个延 60ms（--d 内联）。 */
+  .seat .vote-badge{ position:absolute; left:-5px; top:-5px; min-width:20px; height:20px; padding:0 4px;
+    border-radius:10px; background:var(--vote-bg); border:1px solid var(--vote-line); color:var(--vote-ink);
+    font-size:11.5px; font-weight:700; line-height:18px; text-align:center; z-index:2;
+    animation:popIn var(--t-fast) ease-out both; animation-delay:var(--d,0s); }
+  .seat .vote-badge.exiled{ background:var(--danger); border-color:#8f3b2a; color:#fff; }
+  .seat.dead .vote-badge{ opacity:.6; }
+  /* 被逐者座位红描边（与角标呼应） */
+  .seat.exiled-now .avatar{ border-color:var(--danger);
+    box-shadow:0 0 0 2px rgba(192,86,63,.55), 0 0 14px rgba(192,86,63,.35), 0 2px 8px rgba(0,0,0,.4); }
+  /* 平票候选标识（tie_speech / tie_vote 期间）：蓝灰双环 + 「平」徽标 */
+  .seat.tied .avatar{ border-color:var(--vote-line); box-shadow:0 0 0 2px rgba(47,63,85,.8), 0 0 0 5px rgba(47,63,85,.35), 0 2px 8px rgba(0,0,0,.4); }
+  .seat .badge.tie{ background:var(--vote-bg); color:var(--vote-ink); border-color:var(--vote-line); }
+
+  /* ============ 中列底部操作区 ============ */
+  .controls{ grid-area:ctrl; border-top:1px solid var(--line); background:rgba(0,0,0,.22); padding:14px 22px 18px;
+             display:flex; flex-direction:column; gap:10px; }
+  .controls .hint{ margin:0; font-size:14px; color:var(--ink-dim); }
+  .controls .hint.faint{ color:var(--ink-faint); font-size:13px; }
+  .target-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .target{ font:inherit; cursor:pointer; padding:7px 14px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-2); color:var(--ink); font-size:13.5px; }
+  .target:hover{ border-color:var(--gold-soft); }
+  .target.selected{ background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; border-color:var(--gold-soft); font-weight:600; }
+  .action-row{ display:flex; align-items:center; gap:10px; }
+  .action-row .sp{ flex:1; }
+  .btn{ font:inherit; cursor:pointer; padding:9px 20px; border-radius:var(--radius-sm); border:1px solid var(--gold-soft);
+        color:#2a210c; font-weight:600; background:linear-gradient(180deg,#d8b25a,#b8954a); }
+  .btn:hover{ filter:brightness(1.05); }
+  .btn.ghost{ background:transparent; color:var(--ink-dim); border-color:var(--line); font-weight:500; }
+  /* 已投确认条：保密期真人票向的唯一出口（把「看不到别人的票」翻译成对开票时刻的期待） */
+  .vote-confirm{ display:flex; flex-direction:column; gap:2px; padding:8px 12px; border-radius:9px;
+    background:var(--vote-bg); border:1px solid var(--vote-line); }
+  .vote-confirm .vc-main{ font-size:13px; color:var(--vote-ink); font-weight:600; }
+  .vote-confirm .vc-sub{ font-size:12px; color:var(--ink-faint); }
+
+  /* 可达性：reduce 时全部 stagger/scale/位移一帧直出终态 */
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body class="is-day">
+
+  <div class="demo-bar">
+    <strong>投票可视化 v2A · 右翼主桌</strong>
+    <button class="st-btn on" data-st="1">① 投票进行中</button>
+    <button class="st-btn" data-st="2">② 开票揭示</button>
+    <button class="st-btn" data-st="3">③ 平票→加赛</button>
+    <button class="st-btn" data-st="4">④ 放逐宣判</button>
+    <button class="st-btn" data-st="5">⑤ 历史投票卡</button>
+    <span class="spacer"></span>
+    <button id="btn-replay" disabled>↺ 重播动画</button>
+  </div>
+
+  <div class="frame">
+    <div class="topbar">
+      <span class="phase" id="tb-phase">白天 · 投票</span>
+      <span class="round">第 2 天</span>
+      <span class="alive" id="tb-alive">存活 <b>5 / 7</b></span>
+      <span class="role">你是：<b>预言家</b></span>
+    </div>
+
+    <!-- 左：私密 + 公开信息（速览 chips 挪入此处） -->
+    <aside class="info">
+      <div class="info-head">🔒 <b>你的信息面板</b> · 私密仅你可见</div>
+      <div class="info-body" id="info-body"></div>
+    </aside>
+
+    <!-- 中：发言流（chat-head 已删，存活并入状态条） -->
+    <div class="chat">
+      <div class="stream" id="stream"></div>
+    </div>
+
+    <!-- 右：整列全高只放牌桌 -->
+    <aside class="side">
+      <div class="table-wrap">
+        <div class="table" id="table">
+          <div class="felt"></div>
+          <!-- 舞台由 JS 按演示状态注入（veil / reveal / speech） -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中列底部操作区 -->
+    <div class="controls" id="controls"></div>
+  </div>
+
+<script>
+  /* =====================================================================
+     假数据剧本（7 人标准局，像真局）：
+       夜1：狼刀被女巫救回（平安夜）→ 白1（7 人投票）：
+            首轮 沈舟3 / 阿岚2 / 小满1 / 弃1 → 沈舟被放逐（你的查杀）
+       夜2：林夜被刀 → 白2（5 人投票）：
+            首轮 阿岚2 / 小满2 / 弃1 → 平票 → 加赛 阿岚3 / 小满1 / 弃1 → 阿岚被放逐
+     你 = 3 号预言家：夜1 查杀沈舟，夜2 查杀阿岚。
+     ===================================================================== */
+  const SEATVAR=['--seat-1','--seat-2','--seat-3','--seat-4','--seat-5','--seat-6'];
+  const P={
+    1:{name:'乔木', ch:'乔'},
+    2:{name:'小满', ch:'满'},
+    3:{name:'你',   ch:'你', you:true},
+    4:{name:'林夜', ch:'夜'},
+    5:{name:'沈舟', ch:'舟'},
+    6:{name:'阿岚', ch:'岚'},
+    7:{name:'白露', ch:'露'},
+  };
+  const seatColor=s=>`var(${SEATVAR[(s-1)%6]})`;
+  const nameColor=s=>P[s].you?'var(--gold)':seatColor(s);
+  const NM=s=>`<b class="nb" style="color:${nameColor(s)};font-weight:600">${P[s].name}<span style="color:var(--ink-faint);font-weight:400">（${s}号）</span></b>`;
+  const pav=(s,size,cls)=>`<span class="pav ${cls||''}" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.46)}px;background:${seatColor(s)}">${P[s].ch}</span>`;
+
+  /* ---- 票型数据（对应 vote_resolved payload.votes / payload.tally） ---- */
+  const D1_FIRST={ votes:[{v:1,t:5},{v:3,t:5},{v:7,t:5},{v:2,t:6},{v:4,t:6},{v:5,t:2},{v:6,abs:true}],
+                   result:{outcome:'exile', t:5, n:3} };
+  const D2_FIRST={ votes:[{v:1,t:6},{v:3,t:6},{v:6,t:2},{v:7,t:2},{v:2,abs:true}],
+                   result:{outcome:'tie', ties:[2,6], txt:'平票（小满 2 / 阿岚 2）→ 进入加赛'} };
+  const D2_TIE  ={ votes:[{v:1,t:6},{v:3,t:6},{v:7,t:6},{v:6,t:2},{v:2,abs:true}],
+                   result:{outcome:'exile', t:6, n:3} };
+
+  function groupVotes(votes){
+    const by={}, abst=[];
+    votes.forEach(o=>{ if(o.abs){ abst.push(o.v); } else { (by[o.t]=by[o.t]||[]).push(o.v); } });
+    const groups=Object.keys(by).map(t=>({t:+t, voters:by[t]})).sort((a,b)=>b.voters.length-a.voters.length || a.t-b.t);
+    return {groups, abst};
+  }
+
+  /* ================= 左列：信息面板 ================= */
+  const PRIVATE=`
+    <div class="idcard">
+      ${pav(3,46,'id-av')}
+      <div><div class="id-name">${NM(3)}</div>
+      <div class="id-role">预言家 · <span class="fac good">好人阵营</span></div></div>
+    </div>
+    <div class="psec"><h4>🔍 查验记录</h4>
+      <div class="chk"><span class="chk-night">第1夜</span>${pav(5,28)}<span class="chk-name">${NM(5)}</span><span class="badge-wolf">狼人</span></div>
+      <div class="chk"><span class="chk-night">第2夜</span>${pav(6,28)}<span class="chk-name">${NM(6)}</span><span class="badge-wolf">狼人</span></div>
+    </div>`;
+  const DEATHS=`
+    <div class="psec"><h4>💀 死亡公告</h4>
+      <div class="death-row"><span class="d-when">第1天</span>${pav(5,28,'d-av')}<span class="d-name">${NM(5)}</span><span class="d-cause">被放逐</span></div>
+      <div class="death-row"><span class="d-when">第2夜</span>${pav(4,28,'d-av')}<span class="d-name">${NM(4)}</span><span class="d-cause">夜里出局</span></div>
+    </div>`;
+
+  /* 场上速览（v2A）：横排 36px 头像 chips，title 悬停出全名 */
+  function glanceSec(dead){
+    const seats=[1,2,3,4,5,6,7];
+    const alive=seats.filter(s=>!dead.includes(s)).length;
+    const chips=seats.map(s=>{
+      const isDead=dead.includes(s);
+      return `<span class="gchip ${isDead?'dead':''} ${P[s].you?'you':''}"
+        title="${P[s].name}（${s}号） · ${isDead?'出局':'存活'}">${pav(s,36)}<span class="gno">${s}号</span></span>`;
+    }).join('');
+    return `<div class="psec"><h4>👁 场上速览 · <span class="nb">存活 ${alive} / 7</span></h4>
+      <div class="glance">${chips}</div></div>`;
+  }
+
+  /* 票流图一轮：complete=票型公示；pending=进行中。
+     v2A 保密收紧：pending 只留一行「暗投进行中」，不再显示「你已投 X」——
+     真人票向唯一出口是操作区 .vote-confirm。 */
+  function vfRound(sub, data){
+    let html=`<div class="vr"><div class="vr-sub">${sub}</div>`;
+    if(!data){ // 进行中
+      html+=`<div class="vf-pending nb">🕐 暗投进行中 · 开票时公示</div>`;
+      return html+`</div>`;
+    }
+    const {groups, abst}=groupVotes(data.votes);
+    const max=groups.length?groups[0].voters.length:1;
+    groups.forEach(g=>{
+      const exiled=data.result.outcome==='exile'&&data.result.t===g.t;
+      const chips=g.voters.map(v=>pav(v,16)).join('');
+      html+=`<div class="vf-row ${exiled?'exiled':''}">
+        <span class="vf-chips">${chips}</span><span class="vf-arr">→</span>
+        <span class="vf-tgt">${pav(g.t,20)}${NM(g.t)}</span>
+        <span class="vf-bar"><i style="width:${Math.round(g.voters.length/max*100)}%"></i></span>
+        <span class="vf-n">${g.voters.length}</span></div>`;
+    });
+    if(abst.length){
+      html+=`<div class="vf-row abs">
+        <span class="vf-chips">${abst.map(v=>pav(v,16)).join('')}</span><span class="vf-arr"></span>
+        <span class="vf-tgt nb">弃票</span><span class="vf-bar" style="visibility:hidden"></span>
+        <span class="vf-n">${abst.length}</span></div>`;
+    }
+    const r=data.result;
+    if(r.outcome==='exile'){
+      html+=`<div class="vf-banner exile">${NM(r.t)} <span class="nb">被放逐（${r.n} 票）</span></div>`;
+    }else if(r.outcome==='tie'){
+      html+=`<div class="vf-banner tie nb">${r.txt}</div>`;
+    }else{
+      html+=`<div class="vf-banner tie nb">无人被放逐，直接入夜</div>`;
+    }
+    return html+`</div>`;
+  }
+
+  function voteDayCard(day, open, sum, body){
+    return `<div class="vote-day ${open?'open':''}">
+      <div class="vd-head" onclick="this.parentElement.classList.toggle('open')">
+        <span class="vd-arrow">▸</span><span class="nb">第 ${day} 天</span><span class="vd-sum">${sum}</span></div>
+      <div class="vd-body">${body}</div></div>`;
+  }
+  const DAY1_CARD=open=>voteDayCard(1, open, `放逐 ${NM(5)}`, vfRound('首轮', D1_FIRST));
+
+  function deadList(st){ return (st>=4)?[4,5,6]:[4,5]; }
+
+  function renderInfo(st){
+    let d2body='', d2sum='', flash=(st===5);
+    if(st===1){ d2sum='进行中'; d2body=vfRound('首轮', null); }
+    else if(st===2){ d2sum='平票 · 待加赛'; d2body=vfRound('首轮', D2_FIRST); }
+    else if(st===3){ d2sum='进行中'; d2body=vfRound('首轮', D2_FIRST)+vfRound('加赛', null); }
+    else { d2sum=`放逐 ${NM(6)}`; d2body=vfRound('首轮', D2_FIRST)+vfRound('加赛', D2_TIE); }
+    document.getElementById('info-body').innerHTML=PRIVATE+
+      `<div class="pub-divider"><span>公 开 信 息</span></div>`+
+      glanceSec(deadList(st))+DEATHS+
+      `<div class="psec vote-sec ${flash?'flash':''}"><h4>🗳️ 投票记录</h4>`+
+      voteDayCard(2, true, d2sum, d2body)+DAY1_CARD(false)+`</div>`;
+  }
+
+  /* ================= 右列：大牌桌 + 舞台 ================= */
+  // 座位极角公式与基准稿一致（5/7 人通用；落地抽 seatPos(i,total) 具名导出）
+  function seatPos(i,total){
+    const ang=(-90+i*360/total)*Math.PI/180;
+    return {x:50+43*Math.cos(ang), y:50+44*Math.sin(ang)};
+  }
+
+  function renderTable(st){
+    const table=document.getElementById('table');
+    table.querySelectorAll('.seat,.stage').forEach(n=>n.remove());
+    // 投票保密期「压暗封桌」：felt 蓝灰内辉，开票瞬间褪去
+    table.classList.toggle('veiled', st===1||st===3);
+    const dead=deadList(st);
+    const tied=(st===3)?[2,6]:[];
+    // 票数角标（vote_resolved payload.tally；结算前绝不渲染——保密期座位环零角标）：
+    //  ② 首轮开票后：阿岚2 / 小满2（延迟到榜单落位后按座位序 60ms stagger 弹出）
+    //  ④⑤ 加赛开票后：阿岚3(红) / 小满1
+    let badges={}, exiledNow=null;
+    if(st===2){ badges={6:{n:2,delay:1.3},2:{n:2,delay:1.36}}; }
+    if(st===4){ badges={6:{n:3,exiled:true,delay:1.3},2:{n:1,delay:1.36}}; exiledNow=6; }
+    if(st===5){ badges={6:{n:3,exiled:true,delay:0},2:{n:1,delay:0}}; }
+    const seats=[1,2,3,4,5,6,7];
+    seats.forEach((s,i)=>{
+      const pos=seatPos(i,seats.length);
+      const isDead=dead.includes(s);
+      const el=document.createElement('div');
+      el.className='seat'+(isDead?' dead':'')+(tied.includes(s)?' tied':'')+(exiledNow===s?' exiled-now':'');
+      el.style.left=pos.x+'%'; el.style.top=pos.y+'%';
+      const b=badges[s];
+      const voteBadge=b?`<span class="vote-badge ${b.exiled?'exiled':''}" style="--d:${b.delay}s">${b.n}</span>`:'';
+      const idBadge=P[s].you?'<span class="badge you">你</span>':(tied.includes(s)?'<span class="badge tie">平</span>':'');
+      el.innerHTML=`<div class="avatar" style="background:${seatColor(s)}"><span class="ch">${P[s].ch}</span>${idBadge}${voteBadge}</div>
+        <div class="nm" style="${!isDead?`color:${nameColor(s)};font-weight:600`:''}">${P[s].name}<span class="no">（${s}）</span></div>
+        <div class="st">${isDead?(st===5&&s===6?'遗言中':'出局'):'存活'}</div>`;
+      table.appendChild(el);
+    });
+    table.insertAdjacentHTML('beforeend', stageHtml(st));
+  }
+
+  /* ---- 舞台三种演示形态：veil（暗投幕布）/ reveal（开票）/ speech ---- */
+  // veil：零计票结构——无候选阵列、无票位、无计数槽，只有仪式氛围。
+  function veilStage(title){
+    return `<div class="stage veil">
+      <div class="vl-title nb">${title}</div>
+      <div class="vl-box"></div>
+      <div class="vl-sub"><span class="nb">暗投进行中</span><span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+      <div class="vl-note nb">全部票向将在开票时一次性公示</div></div>`;
+  }
+
+  function revealStage(sub, data){
+    const {groups, abst}=groupVotes(data.votes);
+    let rows='', i=0;
+    groups.forEach(g=>{
+      const d=(i*0.12).toFixed(2);
+      const chips=g.voters.map((v,j)=>{
+        const dc=(i*0.12+0.15+j*0.06).toFixed(2);
+        return `<span class="pav" style="width:20px;height:20px;font-size:10px;background:${seatColor(v)};--dc:${dc}s">${P[v].ch}</span>`;
+      }).join('');
+      rows+=`<div class="rv-row" style="--d:${d}s">${pav(g.t,26)}<span class="rv-name" style="color:${nameColor(g.t)}">${P[g.t].name}</span><span class="rv-chips">${chips}</span><span class="rv-n">${g.voters.length}</span></div>`;
+      i++;
+    });
+    if(abst.length){
+      const d=(i*0.12).toFixed(2);
+      const chips=abst.map((v,j)=>{
+        const dc=(i*0.12+0.15+j*0.06).toFixed(2);
+        return `<span class="pav" style="width:20px;height:20px;font-size:10px;background:var(--bg-3);color:var(--ink-faint);--dc:${dc}s">${P[v].ch}</span>`;
+      }).join('');
+      rows+=`<div class="rv-row abs" style="--d:${d}s"><span class="rv-name nb">弃票</span><span class="rv-chips">${chips}</span><span class="rv-n">${abst.length}</span></div>`;
+      i++;
+    }
+    const vd=(i*0.12+0.6).toFixed(2); // 行播完 +400ms 出宣判（落地 = revealHold 窗口内）
+    const r=data.result;
+    let verdict='', cls='';
+    if(r.outcome==='exile'){
+      cls='exile';
+      verdict=`<div class="rv-verdict" style="--dv:${vd}s">${pav(r.t,72,'rv-exile-av')}
+        <div class="vtext">${NM(r.t)} <span class="nb">被放逐（${r.n} 票）</span></div></div>`;
+    }else if(r.outcome==='tie'){
+      verdict=`<div class="rv-verdict" style="--dv:${vd}s">
+        <div class="rv-ties">${r.ties.map(s=>pav(s,48,'rv-tie-av')).join('')}</div>
+        <div class="vtext nb">平票 → 发言后加赛</div></div>`;
+    }else{
+      verdict=`<div class="rv-verdict" style="--dv:${vd}s">
+        <div class="vtext dim nb" style="color:var(--ink-dim)">无人被放逐，即将入夜</div></div>`;
+    }
+    // 溢出纪律（落地必守）：只列 tally>0 + 上限 5 行 + 超出并作「其余 M 票」+ 弃票汇总置底
+    return `<div class="stage reveal ${cls}" style="${cls==='exile'?`--dv:${vd}s`:''}">
+      <div class="rv-title nb">开票 · ${sub}</div>
+      <div class="rv-list">${rows}</div>${verdict}</div>`;
+  }
+
+  function speechStage(seat, line){
+    return `<div class="stage">${pav(seat,80,'spk-av')}
+      <div class="spk-name nb">${P[seat].name}（${seat}号）</div>
+      <div class="spk-line">${line}</div></div>`;
+  }
+
+  function stageHtml(st){
+    if(st===1) return veilStage('投票表决');
+    if(st===2) return revealStage('首轮', D2_FIRST);
+    if(st===3) return veilStage('平票加赛');
+    if(st===4) return revealStage('加赛', D2_TIE);
+    return speechStage(6, '行吧，票出我。最后说一句：小满的票从头到尾都在避重就轻，明天重点看她。');
+  }
+
+  /* ================= 中列：发言流 + 操作区 ================= */
+  const bubble=(s,tx)=>`<div class="row ${P[s].you?'self':''}">${pav(s,36)}
+    <div class="bubble"><div class="who" style="color:${nameColor(s)}">${P[s].name}（${s}号）</div>
+    <div class="tx">${tx}</div></div></div>`;
+  const notice=(cls,tag,tx)=>`<div class="notice ${cls}"><span class="ntag">${tag}</span><span>${tx}</span></div>`;
+
+  const CHAT_BASE=
+    notice('host','主持人',`天亮了。昨晚 ${NM(4)} 夜里出局。`)+
+    bubble(1,'昨晚林夜倒了。我继续站边 3 号预言家，昨天的查杀已经应验，今天听他的。')+
+    bubble(3,'第二晚我验的是阿岚——查杀。两狼已经找到一只，今天出阿岚，好人别乱票。')+
+    bubble(7,'查杀我记下了。但小满从头到尾躲在后面不表态，我更想先看看她的态度。');
+
+  function renderChat(st){
+    let html=CHAT_BASE;
+    if(st===1){
+      // 保密口径：进行中的公告不带任何票数/票向
+      html+=notice('vote','投票',`投票进行中 · <span class="nb">暗投，开票时公示</span>`);
+    }else if(st===2){
+      html+=notice('vote','投票',`开票 · 首轮：${NM(2)} 2 票 / ${NM(6)} 2 票 / 弃票 1 —— <span class="nb">平票，进入加赛</span>`);
+    }else if(st>=3){
+      // 平票发言/加赛候选顺序 = 引擎 speakerOrder（座位升序）：小满(2) 先于 阿岚(6)
+      html+=notice('vote','投票',`开票 · 首轮：${NM(2)} 2 票 / ${NM(6)} 2 票 / 弃票 1 —— <span class="nb">平票，进入加赛</span>`)+
+        notice('host','主持人',`平票加赛：请 ${NM(2)}、${NM(6)} 依次发言。`)+
+        bubble(2,'我发言少是因为没信息，不是躲。我的票没有一张有问题。')+
+        bubble(6,'我不是狼。预言家的查杀我不认，真狼正躲在查杀后面带节奏。');
+    }
+    if(st===3){ html+=notice('vote','投票',`加赛投票进行中 · <span class="nb">暗投，开票时公示</span>`); }
+    if(st>=4){ html+=notice('vote','投票',`开票 · 加赛：${NM(6)} 3 票 / ${NM(2)} 1 票 / 弃票 1`)+
+      notice('host','主持人',`${NM(6)} 被放逐。`); }
+    if(st===5){ html+=bubble(6,'行吧，票出我。最后说一句：小满的票从头到尾都在避重就轻，明天重点看她。'); }
+    document.getElementById('stream').innerHTML=html;
+    const el=document.getElementById('stream'); el.scrollTop=el.scrollHeight;
+  }
+
+  function renderControls(st){
+    const c=document.getElementById('controls');
+    if(st===1){
+      // 已投出后的确认条 = 保密期真人票向的唯一出口（落地 = ActionArea vote 分支）
+      c.innerHTML=`<div class="vote-confirm">
+        <span class="vc-main nb">✓ 已投出：阿岚（6号）（暗投，开票时公示）</span>
+        <span class="vc-sub nb">等待其他玩家投票…</span></div>`;
+    }else if(st===3){
+      // 加赛且你未投：target-grid + 提交/弃票
+      c.innerHTML=`<p class="hint">请进行二次投票：</p>
+        <div class="target-grid">
+          <button class="target">小满（2号）</button>
+          <button class="target selected">阿岚（6号）</button>
+        </div>
+        <div class="action-row"><span class="sp"></span>
+          <button class="btn ghost">弃票</button>
+          <button class="btn">提交投票</button></div>`;
+      c.querySelectorAll('.target').forEach(b=>b.addEventListener('click',()=>{
+        c.querySelectorAll('.target').forEach(x=>x.classList.remove('selected'));
+        b.classList.add('selected');
+      }));
+    }else if(st===2||st===4){
+      c.innerHTML=`<p class="hint faint nb">开票中，请稍候…</p>`;
+    }else{
+      c.innerHTML=`<p class="hint faint nb">阿岚（6号） 正在发表遗言…</p>`;
+    }
+  }
+
+  /* ================= 状态机 + 演示条 ================= */
+  const PHASE={1:'白天 · 投票',2:'白天 · 开票',3:'白天 · 平票加赛',4:'白天 · 开票',5:'白天 · 遗言'};
+  let current=1;
+  function render(){
+    document.getElementById('tb-phase').textContent=PHASE[current];
+    document.getElementById('tb-alive').innerHTML=`存活 <b>${current>=4?4:5} / 7</b>`;
+    renderInfo(current);
+    renderChat(current);
+    renderControls(current);
+    renderTable(current);
+    document.querySelectorAll('.st-btn').forEach(b=>b.classList.toggle('on', +b.dataset.st===current));
+    document.getElementById('btn-replay').disabled=!(current===2||current===4);
+  }
+  document.querySelectorAll('.st-btn').forEach(b=>b.addEventListener('click',()=>{ current=+b.dataset.st; render(); }));
+  // 重播 = 重建 DOM，CSS animation 自动从头播（落地 = 以新 eventId 触发 FM variants）
+  document.getElementById('btn-replay').addEventListener('click',()=>render());
+  render();
+</script>
+</body>
+</html>

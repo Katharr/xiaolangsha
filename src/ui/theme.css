@@ -40,6 +40,20 @@
   /* 字体：衬体标题（阶段/字幕） + 无衬线正文 */
   --serif: "Songti SC", "STSong", Georgia, "Times New Roman", serif;
   --sans: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* 投票蓝灰视觉系（felt 封桌 / vote-badge / 投票通知 / vd-head / plaque.vote 同源） */
+  --vote-bg: #1d2530;
+  --vote-line: #2f3f55;
+  --vote-ink: #b9cbe2;
+
+  /* 私密 token 专用色（取自既有色板语义：teal=救、紫=毒、蓝=守） */
+  --tk-save: #44b2a6;
+  --tk-poison: #b07cc4;
+  --tk-guard: #5b91c9;
+
+  /* 牌桌高度预算：视口高减去牌桌外的固定高度（table-wrap 上下 padding + 边线）。
+     牌桌直径 = min(列宽, 100dvh - 这个值, 880px)。 */
+  --chrome-h: 28px;
 }
 
 /* 白天态：底色更暖更亮一档，主文字更亮（由 body.is-day 切换）。 */

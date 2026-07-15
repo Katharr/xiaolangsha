@@ -13,9 +13,7 @@ import {
   PhaseTransition,
   ReviewPanel,
   RoleSelectScreen,
-  Roster,
   SeatRing,
-  StatusBar,
   TextInput,
 } from "./ui";
 
@@ -52,7 +50,9 @@ type TextConfig = {
 };
 
 /**
- * 聊天室外壳：固定视口，状态栏 / 消息流（唯一滚动）/ 操作区 / 输入区。
+ * 圆桌剧场外壳：固定视口单行三列「过程档案 | 大牌桌 | 发言流+操作」。
+ * 牌桌是视觉与信息主体（桌心铭牌承载相位/轮次/存活，座位铭牌承载身份/私密标记）；
+ * 发言流是唯一长滚动区，操作与输入折在其底部。
  * 只绑定 store 暴露的 visibleInformation / messages / reviewContext 等只读视图（ISO-001）。
  */
 export function App({ store }: AppProps) {
@@ -181,8 +181,6 @@ export function App({ store }: AppProps) {
     return undefined;
   })();
 
-  const aliveCount = vi ? vi.alivePlayers.length : 0;
-  const totalCount = vi ? aliveCount + vi.deadPlayers.length : 0;
   // 自动流程异常停止时才提示（busy 期间驱动仍在跑，不打扰）。
   const haltText = busy ? null : abnormalHaltText(diagnostics);
 
@@ -219,34 +217,43 @@ export function App({ store }: AppProps) {
     );
   }
 
+  const spectating = Boolean(participation && participation !== "alive");
+
   return (
     <div className={`app-root${showBoard ? "" : " is-solo"}`}>
       <PhaseTransition phase={phase} round={vi?.round} />
-      <StatusBar
-        phase={phase}
-        participation={participation}
-        vi={vi}
-        onExportDebug={exportDebugLog}
-        onNewGame={newGame}
-      />
 
       {haltText ? (
         <div className="halt-banner" role="alert">
           <span className="halt-banner-icon">⚠️</span>
           <span className="halt-banner-text">
-            {haltText} 请点右上角「导出日志」把这局发出来排查。
+            {haltText} 请导出日志把这局发出来排查。
           </span>
+          <button
+            type="button"
+            className="halt-export"
+            onClick={exportDebugLog}
+          >
+            导出日志
+          </button>
         </div>
       ) : null}
 
       {showBoard && vi ? <InfoPanel vi={vi} /> : null}
 
+      {showBoard && vi ? (
+        <SeatRing
+          vi={vi}
+          thinking={thinking}
+          latestSpeech={latestSpeech}
+          phase={phase}
+          spectating={spectating}
+          onNewGame={newGame}
+          onExportDebug={exportDebugLog}
+        />
+      ) : null}
+
       <section className="chat">
-        {!isReview && vi ? (
-          <div className="chat-head">
-            💬 发言流 · 存活 {aliveCount} / {totalCount}
-          </div>
-        ) : null}
         <main className="app-main">
           {isReview && reviewContext ? (
             <ReviewPanel
@@ -265,43 +272,30 @@ export function App({ store }: AppProps) {
             />
           )}
         </main>
+        {!isReview ? (
+          <footer className="app-controls">
+            <ActionArea
+              phase={phase}
+              participation={participation}
+              vi={vi}
+              busy={busy}
+              humanPlayerId={HUMAN_PLAYER_ID}
+              boardId={STANDARD_BOARD_ID}
+              nextKey={nextKey}
+              act={act}
+            />
+            <TextInput
+              enabled={Boolean(textConfig)}
+              busy={busy}
+              maxLength={500}
+              placeholder={textConfig?.placeholder ?? ""}
+              submitLabel={textConfig?.submitLabel ?? "发送"}
+              emptyHint={textConfig?.emptyHint ?? ""}
+              onSubmit={submitText}
+            />
+          </footer>
+        ) : null}
       </section>
-
-      {!isReview && vi ? (
-        <aside className="side" aria-label="牌桌">
-          <SeatRing
-            vi={vi}
-            thinking={thinking}
-            latestSpeech={latestSpeech}
-            phase={phase}
-          />
-          <Roster vi={vi} />
-        </aside>
-      ) : null}
-
-      {!isReview ? (
-        <footer className="app-controls">
-          <ActionArea
-            phase={phase}
-            participation={participation}
-            vi={vi}
-            busy={busy}
-            humanPlayerId={HUMAN_PLAYER_ID}
-            boardId={STANDARD_BOARD_ID}
-            nextKey={nextKey}
-            act={act}
-          />
-          <TextInput
-            enabled={Boolean(textConfig)}
-            busy={busy}
-            maxLength={500}
-            placeholder={textConfig?.placeholder ?? ""}
-            submitLabel={textConfig?.submitLabel ?? "发送"}
-            emptyHint={textConfig?.emptyHint ?? ""}
-            onSubmit={submitText}
-          />
-        </footer>
-      ) : null}
     </div>
   );
 }
