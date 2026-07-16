@@ -77,3 +77,19 @@ export const NIGHT_ACTION_VERB: Record<Exclude<NightActionType, "none">, string>
     witch_save: "用解药救",
     witch_poison: "用毒药毒",
   };
+
+/** 复盘真相死因（未掩蔽）：与对局内 DEATH_CAUSE_LABEL 的「夜里出局」区分。 */
+export const REVIEW_DEATH_TRUTH_LABEL: Record<DeathCause, string> = {
+  night_kill: "狼人夜刀",
+  poison: "女巫毒杀",
+  exile: "被放逐",
+  hunter_shot: "猎人枪杀",
+};
+
+/** 复盘死亡时序带的短标签。 */
+export const REVIEW_DEATH_SHORT_LABEL: Record<DeathCause, string> = {
+  night_kill: "夜刀",
+  poison: "毒杀",
+  exile: "放逐",
+  hunter_shot: "枪杀",
+};

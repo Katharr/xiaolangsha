@@ -6,11 +6,11 @@
 > 早期两列稿 `wolfcha-mockup-balanced.html` 仅作历史参考。逻辑层（store/rules/shared）
 > 一行不动，只改/扩 UI 层。
 >
-> **进度**：阶段 0（token+深色）✅、阶段 1（环形牌桌）✅、阶段 1.5（三列骨架）✅、阶段 2（DiceBear 头像）✅、阶段 3（天黑/天亮过场）✅、主页 HomeScreen ✅、选身份页 RoleSelectScreen ✅、**阶段 4（圆桌剧场 v3：投票可视化 + 布局重排 + 信息上桌）✅** 已全部落地。
+> **进度**：阶段 0（token+深色）✅、阶段 1（环形牌桌）✅、阶段 1.5（三列骨架）✅、阶段 2（DiceBear 头像）✅、阶段 3（天黑/天亮过场）✅、主页 HomeScreen ✅、选身份页 RoleSelectScreen ✅、阶段 4（圆桌剧场 v3：投票可视化 + 布局重排 + 信息上桌）✅、**阶段 5（复盘时间线）✅** 已全部落地。
 > **⚠️ 布局已升级为「圆桌剧场」单行三列**（预览基准改为 `preview/vote-mockup-v3.html`，经 v1→v2a/v2b→v3 三轮用户评审拍板）：
 > 左「过程档案」窄列｜中「大牌桌」视觉主体（座位铭牌+桌心铭牌）｜右「发言流+操作」。
 > 顶部状态条 StatusBar 与场上速览 Roster 已删除（信息拆迁进牌桌，见下「阶段 4」）。
-> **下一步 = 阶段 5：复盘时间线**，见下「阶段 5」。
+> **下一步 = 阶段 6：打磨 + 回归**，见下「阶段 6」。
 
 ## Context（为什么做）
 
@@ -148,7 +148,7 @@ serif 标题（衬体字，用于阶段/字幕） + sans 正文
 | `src/ui/MessageStream.tsx` (156) | 气泡流 + `SEAT_COLORS` 首字色块头像 + 思考气泡（夜晚匿名），**留在中列** | 阶段1.5 名字改用 `PlayerName`；阶段2 换 DiceBear |
 | `src/ui/ActionArea.tsx` (541) | 按相位渲染合法按钮（女巫三步/投票/夜晚行动） | 逻辑保留，阶段0/6 套新样式；阶段4 投票可视化 |
 | `src/ui/TextInput.tsx` (80) | 自由发言/拉票/遗言输入 | 阶段0/6 套方案 C 输入区样式 |
-| `src/ui/ReviewPanel.tsx` (217) | 6 个平铺列表 + AI 追问 | 阶段5 重构成时间线 |
+| `src/ui/ReviewPanel.tsx` (217) | 6 个平铺列表 + AI 追问 | ✅ 阶段5 已重构成时间线（见下「阶段 5」） |
 | `src/store/messages.ts` | `ChatMessage` 已带 `speakerSeat/speakerLabel/self` | 只读，不改 |
 
 **座位/头像数据来源**：`vi.alivePlayers` + `vi.deadPlayers`（各 `{playerId, seat, name}`）、
@@ -237,8 +237,11 @@ serif 标题（衬体字，用于阶段/字幕） + sans 正文
     与狼的击杀记录不受影响；复盘 reviewContext / debug 导出读 TruthEvent 真相（ISO-002）。
     白天死法（放逐/猎人枪）仍公开。顺手修复 `PublicDeathRef.round` 恒为 0 的占位 bug
     （现从死亡事件回填，死因牌轮次因此才正确）。
-- **阶段 5** — 复盘时间线：`ReviewPanel` 从 6 平铺列表重构成按「夜/天 轮次」分组的可点/可拖时间轴，
-  复用 `reviewContext`，AI 追问保留。
+- **阶段 5** ✅ 已落地 — 复盘时间线（预览基准 `preview/review-timeline-mockup.html`，已批准）：
+  - **数据层**：新增 `src/shared/reviewRounds.ts` 的 `deriveRoundArchives` 纯函数（reviewContext → 序章/逐轮夜卡·天卡/终局归档，只依赖 shared 内部）；死因真相 label 归位 `labels.ts`。`src/rules/reviewRounds.test.ts` 复用真引擎跑全局，覆盖四陷阱（毒杀揭示 / 平票加赛 / 放逐终局拂晓枪 / 铁律③跳遗言）+ 枪杀终局回归（endNote 按实际终局路径分文案）。
+  - **UI 层**：`ReviewPanel.tsx` 容器重写（props 签名不变，App.tsx 零改动）+ 新增 `src/ui/review/` 子目录（ReviewNav 进度轨 / ReviewHero 终局横幅+身份墙+死亡带 / NightCard / DayCard / FinaleCard / ReviewQa 幕后问答 / useScrollSpy / usePulseJump）；`review.css` 全选择器加 `.rv` 作用域、直接引用 theme token。
+  - **导航**：宽屏固定竖轨、≤1280px 退化为吸顶横条药丸（`--nav-h` 分档）；40% 线 scroll-spy + 键盘 ←/→/Home/End + 死亡带点跳金脉冲，AI 追问保留（ReviewQa）。
+  - 基线：`tsc -b` ✅ / `npm test` 188 绿（27 文件）✅ / `npm run build` ✅。
 - **阶段 6** — 打磨 + 回归：toast/loading 反馈、错误更显眼；响应式 + 5/7 人全回归；
   `App.test.tsx`/`MessageStream` 测试随结构修绿；e2e 冒烟 + 降级测试。
 

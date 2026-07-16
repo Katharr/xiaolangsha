@@ -6,4 +6,5 @@ export * from "./models";
 export * from "./personas";
 export * from "./result";
 export * from "./reviewOutcome";
+export * from "./reviewRounds";
 export * from "./schemas";

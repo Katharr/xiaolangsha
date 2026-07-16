@@ -1,22 +1,18 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
-import type {
-  GameAction,
-  NarrationSegment,
-  Player,
-  PlayerOutcome,
-  Result,
-  ReviewContext,
-  ReviewSpeechRef,
-  TruthEvent,
-} from "../shared";
-import { narrateEvent } from "../shared";
+import type { GameAction, Player, Result, ReviewContext } from "../shared";
+import { deriveRoundArchives } from "../shared";
 import { toUserMessage } from "../store";
 
-import { Avatar } from "./Avatar";
-import { FACTION_LABEL, ROLE_LABEL, WIN_REASON_LABEL } from "./labels";
 import { PlayerName } from "./PlayerName";
-import { TextInput } from "./TextInput";
+import { DayCard } from "./review/DayCard";
+import { FinaleCard } from "./review/FinaleCard";
+import { NightCard } from "./review/NightCard";
+import { ReviewHero } from "./review/ReviewHero";
+import { ReviewNav, type NavSection } from "./review/ReviewNav";
+import { ReviewQa, type QaEntry } from "./review/ReviewQa";
+import { usePulseJump } from "./review/usePulseJump";
+import { REDUCED_MOTION, useScrollSpy } from "./review/useScrollSpy";
 import "./review.css";
 
 export type ReviewPanelProps = {
@@ -30,20 +26,12 @@ export type ReviewPanelProps = {
   onExportDebug: () => void;
 };
 
-type QaEntry = { id: number; question: string; answer: string };
-
-/** 时间线里不单独成行的事件：发言并入折叠区；胜负/开局由横幅与速览覆盖。 */
-const TIMELINE_SKIP = new Set([
-  "speech_submitted",
-  "tie_speech_submitted",
-  "win_checked",
-  "game_ended",
-  "game_created",
-]);
-
 /**
- * 复盘面板：仅 review 阶段渲染 store 组装的完整真相（ISO-002 由 store 在调用点保证）。
- * 自上而下＝结果横幅 → 结局速览（谁怎么死的、谁干的）→ 回合叙事时间线 → 向 AI 追问。
+ * 复盘面板「真相卷轴」：仅 review 阶段渲染 store 组装的完整真相
+ * （ISO-002 由 store 在调用点保证）。数据一律来自 deriveRoundArchives
+ * 的派生结构，组件内不散扫 events。
+ * 结构 = 侧边进度轨导航 → 序幕（横幅+身份墙+死亡带）→ 夜/天交错时间流
+ * → 终局卡 → 幕后问答 → 按钮行；预览基准 preview/review-timeline-mockup.html。
  */
 export function ReviewPanel({
   reviewContext,
@@ -54,10 +42,10 @@ export function ReviewPanel({
   askReview,
   onExportDebug,
 }: ReviewPanelProps) {
-  const [qaLog, setQaLog] = useState<QaEntry[]>([]);
-  const [qaId, setQaId] = useState(0);
-  // 追问进行中显示的问题：await 期间先把问题上屏 + 显示「思考中」，让用户看到「已点到、在等待」。
-  const [pending, setPending] = useState<string | null>(null);
+  const archives = useMemo(
+    () => deriveRoundArchives(reviewContext),
+    [reviewContext],
+  );
 
   const byId = useMemo(() => {
     const map = new Map<string, Player>();
@@ -67,55 +55,55 @@ export function ReviewPanel({
     return map;
   }, [reviewContext.players]);
 
-  // 真人是狼时，标出其余狼为「你的狼队友」（复盘可见完整真相）。
-  const teammateIds = useMemo(() => {
-    const human = byId.get(humanPlayerId);
-    if (human?.role !== "werewolf") {
-      return new Set<string>();
-    }
-    return new Set(
-      reviewContext.players
-        .filter((p) => p.role === "werewolf" && p.playerId !== humanPlayerId)
-        .map((p) => p.playerId),
-    );
-  }, [byId, humanPlayerId, reviewContext.players]);
-
-  const sortedPlayers = useMemo(
-    () => [...reviewContext.players].sort((a, b) => a.seat - b.seat),
-    [reviewContext.players],
-  );
-  const outcomeById = useMemo(() => {
-    const map = new Map<string, PlayerOutcome>();
-    for (const o of reviewContext.outcomes) {
-      map.set(o.playerId, o);
-    }
-    return map;
-  }, [reviewContext.outcomes]);
-
-  const rounds = useMemo(
-    () => groupTimeline(reviewContext.events),
-    [reviewContext.events],
-  );
-
-  const renderName = (playerId: string) => {
-    const p = byId.get(playerId);
-    return p ? (
-      <PlayerName name={p.name} seat={p.seat} isSelf={p.isHuman} />
-    ) : (
-      <span className="pname">某玩家</span>
-    );
-  };
-
-  const renderSegments = (segs: NarrationSegment[]) =>
-    segs.map((s, i) =>
-      typeof s === "string" ? (
-        <span key={i}>{s}</span>
+  // 叙事保底 segments 里的玩家 → 统一着色名（PlayerName）。
+  const nameOf = useCallback(
+    (playerId: string): ReactNode => {
+      const p = byId.get(playerId);
+      return p ? (
+        <PlayerName name={p.name} seat={p.seat} isSelf={p.isHuman} />
       ) : (
-        <span key={i}>{renderName(s.playerId)}</span>
-      ),
-    );
+        <span className="pname">某玩家</span>
+      );
+    },
+    [byId],
+  );
 
-  const handleAsk = async (question: string): Promise<boolean> => {
+  const sections = useMemo<NavSection[]>(
+    () => [
+      { id: "prologue", label: "序幕" },
+      ...archives.rounds.map((r) => ({
+        id: r.id,
+        label: `${r.kind === "night" ? "☾ 夜" : "☀ 天"}${r.n}`,
+        dots: r.dots,
+      })),
+      { id: "finale", label: "终局" },
+      { id: "qa", label: "问AI", qa: true },
+    ],
+    [archives],
+  );
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const { curId, goTo } = useScrollSpy(
+    rootRef,
+    useMemo(() => sections.map((s) => s.id), [sections]),
+  );
+  const pulseJump = usePulseJump();
+
+  // ── 幕后问答 state（只存内存，不持久化）。──────────────────
+  const [qaLog, setQaLog] = useState<QaEntry[]>([]);
+  const [qaId, setQaId] = useState(0);
+  // 追问进行中显示的问题：await 期间先把问题上屏 + typing 三点，让用户看到「已点到、在等待」。
+  const [pending, setPending] = useState<string | null>(null);
+  const [qaCtx, setQaCtx] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSend = async () => {
+    const question = draft.trim();
+    if (!question || pending !== null || busy) {
+      return;
+    }
+    setDraft("");
     setPending(question);
     try {
       const result = await askReview(question);
@@ -123,327 +111,87 @@ export function ReviewPanel({
       const id = qaId + 1;
       setQaId(id);
       setQaLog((log) => [...log, { id, question, answer }]);
-      return result.ok;
     } finally {
       setPending(null);
     }
   };
 
-  const winWolf = reviewContext.winner === "werewolf_team";
-
-  return (
-    <div className="rv" aria-label="复盘">
-      {/* 1. 结果横幅 */}
-      <div className={`rv-banner${winWolf ? " win-wolf" : ""}`}>
-        <div className="rv-crown">{winWolf ? "🐺" : "🏆"}</div>
-        <h1>{FACTION_LABEL[reviewContext.winner]} 获胜</h1>
-        <div className="rv-reason">{WIN_REASON_LABEL[reviewContext.winReason]}</div>
-      </div>
-
-      {/* 2. 结局速览 */}
-      <section className="rv-card">
-        <h2 className="rv-title">结局速览</h2>
-        <div className="rv-grid">
-          {sortedPlayers.map((player) => (
-            <OutcomeCard
-              key={player.playerId}
-              player={player}
-              outcome={outcomeById.get(player.playerId)}
-              isTeammate={teammateIds.has(player.playerId)}
-              renderName={renderName}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* 3. 回合叙事时间线 */}
-      <section className="rv-card">
-        <h2 className="rv-title">对局时间线</h2>
-        <div className="rv-timeline">
-          {rounds.map((round) => (
-            <RoundBlock
-              key={`${round.kind}-${round.n}`}
-              round={round}
-              speeches={reviewContext.speeches}
-              renderSegments={renderSegments}
-              renderName={renderName}
-            />
-          ))}
-          <div className="rv-ev win">
-            <span className="rv-dot" />
-            <span>
-              终局：
-              <b className={winWolf ? "v-wolf" : "v-good"}>
-                {FACTION_LABEL[reviewContext.winner]}获胜
-              </b>
-              （{WIN_REASON_LABEL[reviewContext.winReason]}）
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. 向 AI 追问 */}
-      <section className="rv-card">
-        <h2 className="rv-title">向 AI 追问</h2>
-        {qaLog.length > 0 || pending ? (
-          <ul className="rv-qa">
-            {qaLog.map((entry) => (
-              <li key={entry.id}>
-                <p className="qa-q">问：{entry.question}</p>
-                <p className="qa-a">答：{entry.answer}</p>
-              </li>
-            ))}
-            {pending ? (
-              <li className="qa-pending">
-                <p className="qa-q">问：{pending}</p>
-                <p className="qa-a thinking">
-                  AI 正在思考<span className="qa-dots" aria-hidden="true" />
-                </p>
-              </li>
-            ) : null}
-          </ul>
-        ) : null}
-        <TextInput
-          enabled
-          busy={busy}
-          maxLength={300}
-          placeholder="向 AI 玩家追问，例如：你为什么投我？女巫为什么毒我队友？"
-          submitLabel="提交追问"
-          emptyHint="追问不能为空，且不能超过 300 字。"
-          onSubmit={handleAsk}
-        />
-      </section>
-
-      {/* 5. 开始新局 / 导出本局记录 */}
-      <div className="rv-newgame">
-        <button
-          type="button"
-          className="rv-btn primary"
-          disabled={busy}
-          onClick={() =>
-            act({
-              type: "confirm_new_game",
-              idempotencyKey: nextKey("newgame"),
-              playerId: humanPlayerId,
-            })
-          }
-        >
-          开始新局
-        </button>
-        <button type="button" className="rv-btn" onClick={onExportDebug}>
-          ⛏ 导出本局记录
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function OutcomeCard({
-  player,
-  outcome,
-  isTeammate,
-  renderName,
-}: {
-  player: Player;
-  outcome?: PlayerOutcome;
-  isTeammate: boolean;
-  renderName: (id: string) => ReactNode;
-}) {
-  const dead = !player.alive;
-  const tag = outcomeTag(outcome);
-  return (
-    <div className={`rv-ocard${dead ? " dead" : ""}${player.isHuman ? " self" : ""}`}>
-      {isTeammate ? <span className="rv-mate">🐺 你的狼队友</span> : null}
-      <Avatar seat={player.seat} className="rv-av" />
-      <div className="rv-obody">
-        <div className="rv-oline1">
-          <PlayerName name={player.name} seat={player.seat} isSelf={player.isHuman} />
-          {player.isHuman ? <span className="rv-you">· 你</span> : null}
-        </div>
-        <div className="rv-ometa">
-          {ROLE_LABEL[player.role]} ·{" "}
-          <span className={player.faction === "werewolf_team" ? "f-wolf" : "f-good"}>
-            {FACTION_LABEL[player.faction]}
-          </span>
-        </div>
-        <span className={`rv-otag ${tag.cls}`}>
-          {tag.icon} {tag.text}
-          {tag.killerIds && tag.killerIds.length > 0 ? (
-            <span className="rv-by">
-              · {tag.byPrefix}
-              {tag.killerIds.map((id, i) => (
-                <span key={id}>
-                  {i > 0 ? "、" : ""}
-                  {renderName(id)}
-                </span>
-              ))}
-            </span>
-          ) : null}
-          {tag.suffix ? <span className="rv-by">· {tag.suffix}</span> : null}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-type Tag = {
-  cls: string;
-  icon: string;
-  text: string;
-  byPrefix?: string;
-  killerIds?: string[];
-  suffix?: string;
-};
-
-/** 把 PlayerOutcome 折成结局色标（图标 / 文案 / 责任方）。 */
-function outcomeTag(outcome?: PlayerOutcome): Tag {
-  if (!outcome || outcome.alive) {
-    return { cls: "alive", icon: "✅", text: "存活到终局" };
-  }
-  const when =
-    outcome.deathRound !== undefined
-      ? outcome.deathPhaseKind === "night"
-        ? `第${outcome.deathRound}夜 `
-        : `第${outcome.deathRound}天 `
-      : "";
-  switch (outcome.deathCause) {
-    case "night_kill":
-      return {
-        cls: "knife",
-        icon: "🔪",
-        text: `${when}被狼刀`,
-        byPrefix: "狼队 ",
-        killerIds: outcome.killerIds,
-      };
-    case "poison":
-      return {
-        cls: "poison",
-        icon: "☠️",
-        text: `${when}被毒杀`,
-        byPrefix: "女巫 ",
-        killerIds: outcome.killerIds,
-      };
-    case "exile":
-      return {
-        cls: "exile",
-        icon: "⚖️",
-        text: `${when}被放逐`,
-        suffix:
-          outcome.exileVotes !== undefined ? `${outcome.exileVotes} 票出局` : undefined,
-      };
-    case "hunter_shot":
-      return {
-        cls: "hunter",
-        icon: "🎯",
-        text: `${when}被猎人带走`,
-        byPrefix: "猎人 ",
-        killerIds: outcome.killerIds,
-      };
-    default:
-      return { cls: "exile", icon: "💀", text: `${when}出局` };
-  }
-}
-
-type RoundGroup = {
-  kind: "night" | "day";
-  n: number;
-  day: number;
-  events: { event: TruthEvent; segs: NarrationSegment[] }[];
-};
-
-/** 把事件流按「第N夜 / 第N天」分组，过滤发言与胜负噪声（由横幅/折叠区覆盖）。 */
-function groupTimeline(events: TruthEvent[]): RoundGroup[] {
-  const groups: RoundGroup[] = [];
-  let current: RoundGroup | null = null;
-  for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
-    if (TIMELINE_SKIP.has(event.type)) {
-      continue;
-    }
-    const segs = narrateEvent(event);
-    if (!segs) {
-      continue;
-    }
-    const kind: "night" | "day" =
-      event.phase === "night_action" ? "night" : "day";
-    const n = kind === "night" ? event.round.night : event.round.day;
-    if (!current || current.kind !== kind || current.n !== n) {
-      current = { kind, n, day: event.round.day, events: [] };
-      groups.push(current);
-    }
-    current.events.push({ event, segs });
-  }
-  return groups;
-}
-
-function RoundBlock({
-  round,
-  speeches,
-  renderSegments,
-  renderName,
-}: {
-  round: RoundGroup;
-  speeches: ReviewSpeechRef[];
-  renderSegments: (segs: NarrationSegment[]) => ReactNode;
-  renderName: (id: string) => ReactNode;
-}) {
-  // 白天发言折叠：announcement 之后、其余事件（投票/遗言）之前插入。
-  const daySpeeches =
-    round.kind === "day"
-      ? speeches.filter(
-          (s) => s.day === round.day && s.speechKind !== "last_words",
-        )
-      : [];
-  const announce = round.events.filter((e) => e.event.type === "day_announced");
-  const rest = round.events.filter((e) => e.event.type !== "day_announced");
-
-  const evClass = (event: TruthEvent): string => {
-    switch (event.type) {
-      case "night_action_resolved":
-        return event.payload.actionType === "werewolf_kill"
-          ? "kill"
-          : event.payload.actionType === "seer_check"
-            ? "check"
-            : "";
-      case "player_died":
-        return "death";
-      case "vote_resolved":
-        return "vote";
-      case "last_words_submitted":
-        return "words";
-      default:
-        return "";
-    }
+  // 「问这一轮」：设置情境 → 滚到问答区 → 预填输入，待滚动到位再聚焦。
+  const askRound = (label: string) => {
+    setQaCtx(label);
+    goTo("qa");
+    setDraft(`关于${label}：`);
+    window.setTimeout(
+      () => inputRef.current?.focus({ preventScroll: true }),
+      REDUCED_MOTION ? 0 : 450,
+    );
   };
 
-  const line = (item: { event: TruthEvent; segs: NarrationSegment[] }) => (
-    <div className={`rv-ev ${evClass(item.event)}`} key={item.event.eventId}>
-      <span className="rv-dot" />
-      <span className="rv-evtext">{renderSegments(item.segs)}</span>
-    </div>
-  );
-
   return (
-    <div className={`rv-round ${round.kind}`}>
-      <div className="rv-round-head">
-        {round.kind === "night" ? `🌙 第 ${round.n} 夜` : `☀️ 第 ${round.n} 天`}
-      </div>
-      <div className="rv-events">
-        {announce.map(line)}
-        {daySpeeches.length > 0 ? (
-          <details className="rv-speeches">
-            <summary>展开 {daySpeeches.length} 条白天发言</summary>
-            {daySpeeches.map((s) => (
-              <div className="rv-speech" key={s.eventId}>
-                {renderName(s.speakerId)}
-                {s.speechKind === "tie_speech" ? (
-                  <span className="rv-tag">【拉票】</span>
-                ) : null}
-                ：{s.text}
-              </div>
-            ))}
-          </details>
-        ) : null}
-        {rest.map(line)}
+    <div className="rv" ref={rootRef} aria-label="复盘">
+      <ReviewNav
+        sections={sections}
+        curId={curId}
+        qaPending={pending !== null}
+        onGo={goTo}
+      />
+      <div className="page">
+        <ReviewHero prologue={archives.prologue} onJumpDeath={pulseJump} />
+
+        <div className="flow">
+          {archives.rounds.map((round) =>
+            round.kind === "night" ? (
+              <NightCard
+                key={round.id}
+                archive={round}
+                humanPlayerId={humanPlayerId}
+                nameOf={nameOf}
+                onAskRound={askRound}
+              />
+            ) : (
+              <DayCard
+                key={round.id}
+                archive={round}
+                humanPlayerId={humanPlayerId}
+                byId={byId}
+                nameOf={nameOf}
+                onAskRound={askRound}
+              />
+            ),
+          )}
+          <FinaleCard finale={archives.finale} />
+        </div>
+
+        <ReviewQa
+          qaLog={qaLog}
+          pending={pending}
+          qaCtx={qaCtx}
+          draft={draft}
+          setDraft={setDraft}
+          busy={busy}
+          inputRef={inputRef}
+          onSend={handleSend}
+        />
+
+        <div className="btnrow">
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              act({
+                type: "confirm_new_game",
+                idempotencyKey: nextKey("newgame"),
+                playerId: humanPlayerId,
+              })
+            }
+          >
+            🔄 开始新局
+          </button>
+          <button type="button" className="btn ghost" onClick={onExportDebug}>
+            ⬇ 导出本局记录
+          </button>
+        </div>
       </div>
     </div>
   );

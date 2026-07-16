@@ -1,0 +1,994 @@
+<!-- 阶段5「复盘时间线」静态预览 · 基于评审合成方案「真相卷轴 · 战报回放 v2」（棋谱案数据工程 + 章节案叙事保底层嫁接）。
+     纯静态假数据硬编码，不碰 src/；用户过目满意后才落地 ReviewPanel.tsx + review.css。 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>小狼杀 · 阶段5 复盘时间线「真相卷轴」</title>
+<style>
+  /* ===========================================================
+     阶段5「复盘时间线」= 真相卷轴 · 战报回放（v2 合成方案）
+     骨架：单列纵向长页 + 侧边固定竖向时间轴（宽屏；≤1280px 退化为吸顶横条）+ 垂直轮次流。
+     四幕：终局揭示（横幅+身份揭示墙+死亡缩略带）→ 侧边导航 →
+           夜卡/天卡交替时间流 → 终局卡 + 幕后问答 + 按钮行。
+
+     【落地纪律（写给未来落地 src/ 的自己）】
+     1. ISO-002：完整真相只能在 review 阶段经 buildReviewContext 组装，
+        本页一切「真相/真身/🐺」均以复盘态为前提，对局内绝不可见。
+     2. 票数汇总只取 vote_resolved payload.tally（outcome / exiledPlayerId
+        同帧取），votes 数组仅作逐票明细，绝不在组件里自数。
+     3. 女巫救/毒【从不】出现在 nightActions —— 必须扫 events 的
+        night_action_submitted(actionType=witch_save/witch_poison)，并与
+        outcomes(deathCause='poison', killerIds=[女巫]) 交叉核对；含
+        「救回所以 killed:false」「女巫空过 witchChoice=none」两个边角。
+        落地收口在 shared/reviewRounds.ts 的 deriveRoundArchives（配 vitest：
+        毒杀局 / 平票加赛局 / 猎人枪局 / 天1速胜单轮局），UI 只消费派生结构。
+     4. 猎人开枪是独立 hunter_shot 事件（payload {hunterId,targetId}），
+        时序归天卡头（天亮公布帧）。
+     5. 一切「N号」取各 Ref 自带 seat 字段，绝不解析 playerId 后缀。
+     6. 毒杀对局中一律显示「夜里出局」（规则铁律②），复盘揭示真相并
+        标注对局内掩蔽措辞——本页夜2毒杀行即该措辞的视觉基准。
+     7. 叙事保底区 = narrateEvent 兜底：已被结构化区覆盖的事件类型
+        （night_action_resolved / player_died）去重跳过，其余照排——
+        保证增强层漏扫也不丢信息。
+     =========================================================== */
+  :root{
+    --bg-0:#14110c; --bg-1:#1c1813; --bg-2:#241f18; --bg-3:#2e2820; --line:#3a3328;
+    --ink:#ece3d0; --ink-dim:#b3a78d; --ink-faint:#7d745f;
+    --gold:#d8b25a; --gold-soft:#b8954a; --danger:#c0563f; --good:#6fae8f;
+    --seat-1:#6fae8f; --seat-2:#d59a4e; --seat-3:#5b91c9; --seat-4:#b07cc4; --seat-5:#d4685a; --seat-6:#44b2a6;
+    --radius:14px; --radius-sm:9px; --shadow:0 6px 22px rgba(0,0,0,.45); --t-fast:.18s; --t-mid:.35s;
+    --serif:"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    --vote-bg:#1d2530; --vote-line:#2f3f55; --vote-ink:#b9cbe2;
+    --tk-save:#44b2a6; --tk-poison:#b07cc4; --tk-guard:#5b91c9;
+    /* --nav-h = 导航占用的顶部高度：宽屏侧栏模式不占顶（0），≤1280px 吸顶横条模式在媒体查询里改回 */
+    --demo-h:39px; --nav-h:0px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; overflow-x:hidden; } /* 宽内容一律各自 overflow-x:auto，body 永不横滚 */
+  body{
+    background:radial-gradient(1400px 700px at 50% -15%, #2a2418 0%, transparent 60%), var(--bg-0);
+    color:var(--ink); font-family:var(--sans);
+  }
+  .nb{ white-space:nowrap; }
+  ::-webkit-scrollbar{ width:8px; height:8px; } ::-webkit-scrollbar-thumb{ background:#3a3328; border-radius:8px; }
+
+  /* ============ demo 条（预览专用，落地时删除） ============ */
+  .demo-bar{ position:sticky; top:0; z-index:100; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    min-height:var(--demo-h); padding:5px 14px; background:#0d0b07; border-bottom:1px solid var(--line);
+    font-size:13px; color:var(--ink-dim); }
+  .demo-bar strong{ color:var(--gold); font-weight:600; }
+  .demo-bar .spacer{ flex:1; }
+  .demo-bar .lbl{ font-size:11.5px; color:var(--ink-faint); }
+  .demo-bar button{ font:inherit; font-size:12.5px; cursor:pointer; padding:4px 10px; border-radius:8px;
+    border:1px solid var(--line); background:var(--bg-3); color:var(--ink); }
+  .demo-bar button:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .demo-bar button.on{ background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; border-color:var(--gold-soft); }
+
+  /* ============ 侧边固定导航（竖向时间轴 · 无框悬浮进度轨，宽屏默认；≤1280px 退化为吸顶横条见下方媒体查询）
+     现代化要点：不再是带边框的卡片——一条纵向细轨贯穿全部节点，
+     走过的节点实心填充、当前节点金色发光 + 微弱渐变底、悬停轻亮。 ============ */
+  .navbar{ position:fixed; z-index:90; left:max(14px, calc(50% - 510px - 168px)); top:50%; transform:translateY(-50%);
+    width:150px; max-height:calc(100vh - var(--demo-h) - 44px);
+    overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
+  .navbar::-webkit-scrollbar{ display:none; }
+  .nav-inner{ position:relative; display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:6px 0; }
+  .nav-inner::before{ content:""; position:absolute; left:8px; top:20px; bottom:20px; width:2px; border-radius:2px;
+    background:linear-gradient(180deg, transparent, var(--line) 12px, var(--line) calc(100% - 12px), transparent); }
+  .np{ position:relative; flex:0 0 auto; font-family:var(--serif); font-size:13.5px; letter-spacing:1.5px;
+    cursor:pointer; background:none; border:none; color:var(--ink-faint); text-align:left;
+    padding:6px 10px 6px 26px; border-radius:9px; display:flex; align-items:center; gap:7px;
+    transition:color var(--t-fast), background var(--t-fast); }
+  .np::before{ content:""; position:absolute; left:3px; top:50%; transform:translateY(-50%); width:8px; height:8px;
+    border-radius:50%; background:var(--bg-0); border:2px solid #56503f;
+    transition:background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+  .np:hover{ color:var(--gold); }
+  .np:hover::before{ border-color:var(--gold-soft); }
+  .np.seen{ color:var(--ink-dim); }
+  .np.seen::before{ background:var(--gold-soft); border-color:var(--gold-soft); }
+  .np.cur{ color:var(--gold); font-weight:700; background:linear-gradient(90deg, rgba(216,178,90,.13), transparent 82%); }
+  .np.cur::before{ background:var(--gold); border-color:var(--gold);
+    box-shadow:0 0 0 4px rgba(216,178,90,.16), 0 0 12px rgba(216,178,90,.4); }
+  .np .np-dots{ display:flex; gap:3px; min-height:4px; margin-left:auto; }
+  .np .np-dots i{ width:4px; height:4px; border-radius:50%; }
+  .np-conn{ display:none; }
+  .np.np-qa{ margin-top:14px; font-family:var(--sans); font-size:12.5px; letter-spacing:.5px; color:var(--vote-ink); opacity:.85; }
+  .np.np-qa::before{ border-radius:2px; transform:translateY(-50%) rotate(45deg); border-color:var(--vote-line); background:var(--vote-bg); }
+  .np.np-qa:hover{ color:#dce9f8; opacity:1; }
+  .np.np-qa:hover::before{ border-color:var(--vote-ink); }
+  .np.np-qa.cur{ background:linear-gradient(90deg, rgba(47,63,85,.45), transparent 82%); color:#dce9f8; font-weight:600; opacity:1; }
+  .np.np-qa.cur::before{ background:var(--vote-ink); border-color:var(--vote-ink);
+    box-shadow:0 0 0 4px rgba(185,203,226,.14), 0 0 10px rgba(185,203,226,.3); }
+  .np.np-qa.pending{ animation:qaBreath 1.6s ease-in-out infinite; }
+  @keyframes qaBreath{ 0%,100%{ box-shadow:0 0 0 0 rgba(185,203,226,0);} 50%{ box-shadow:0 0 0 4px rgba(185,203,226,.18);} }
+
+  /* ≤1280px：主列两侧放不下侧栏，退化为吸顶横条（原药丸方案，样式在此整体恢复） */
+  @media (max-width:1280px){
+    :root{ --nav-h:48px; }
+    .navbar{ position:sticky; left:auto; top:var(--demo-h); transform:none; width:auto; height:var(--nav-h); max-height:none;
+      background:var(--bg-1); border-bottom:1px solid var(--line); overflow-x:auto; overflow-y:hidden; }
+    .nav-inner{ flex-direction:row; align-items:center; margin:0 auto; height:100%; padding:0 16px; width:max-content; gap:2px; }
+    .nav-inner::before{ display:none; }
+    .np{ flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:3px 12px 2px;
+      border-radius:999px; border:1px solid transparent; letter-spacing:1px; text-align:center; }
+    .np::before{ display:none; }
+    .np.seen{ color:var(--gold-soft); border-color:rgba(184,149,74,.45); background:none; }
+    .np.cur{ background:linear-gradient(180deg,#d8b25a,#b8954a); color:#2a210c; border-color:var(--gold-soft); }
+    .np.cur .np-dots i{ outline:1px solid rgba(42,33,12,.5); }
+    .np .np-dots{ margin-left:0; height:3px; min-height:3px; }
+    .np .np-dots i{ width:3px; height:3px; }
+    .np-conn{ display:block; flex:0 0 auto; align-self:auto; width:14px; height:1px; background:var(--gold-soft); opacity:.35; }
+    .np.np-qa{ margin-top:0; margin-left:10px; border-color:var(--vote-line); opacity:1; }
+    .np.np-qa.cur{ background:var(--vote-bg); color:var(--vote-ink); border-color:var(--vote-ink); }
+  }
+
+  /* ============ 页身：单列卷轴 ============ */
+  .page{ max-width:1020px; margin:0 auto; padding:26px 28px 90px; }
+
+  /* ---- 第0幕 · 终局揭示：结果横幅 ---- */
+  .hero{ scroll-margin-top:calc(var(--demo-h) + var(--nav-h) + 12px); }
+  .banner{ text-align:center; padding:34px 20px 24px; border-radius:var(--radius); border:1px solid var(--line);
+    box-shadow:var(--shadow); margin-bottom:18px; }
+  .banner .b-kicker{ font-size:11.5px; letter-spacing:3px; color:var(--ink-faint); margin-bottom:10px; }
+  .banner .b-title{ font-family:var(--serif); font-size:34px; letter-spacing:8px; color:var(--gold);
+    text-shadow:0 0 22px rgba(216,178,90,.25); text-wrap:balance; }
+  .banner .b-sub{ color:var(--ink-dim); font-size:13.5px; margin-top:10px; }
+  .banner .b-hint{ color:var(--ink-faint); font-size:11.5px; margin-top:6px; }
+  .banner.win-good{ background:linear-gradient(180deg, rgba(111,174,143,.12), rgba(0,0,0,.18)), var(--bg-1); border-color:#3b5748; }
+  .banner.win-wolf{ background:linear-gradient(180deg, rgba(192,86,63,.15), rgba(0,0,0,.18)), var(--bg-1); border-color:#5a2c26; }
+  .banner.win-wolf .b-title{ text-shadow:0 0 22px rgba(192,86,63,.3); }
+
+  /* ---- 身份揭示墙（复用座位铭牌视觉词汇；复盘态 = 全 viewer 可见真相） ---- */
+  .wall{ display:grid; grid-template-columns:repeat(auto-fit, minmax(118px, 1fr)); gap:10px;
+    perspective:900px; margin-bottom:12px; }
+  .wcard{ position:relative; background:var(--bg-2); border:1px solid var(--line); border-radius:12px;
+    padding:13px 8px 11px; display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center;
+    animation:flipIn .5s ease-out both; animation-delay:calc(var(--i) * 80ms); }
+  @keyframes flipIn{ from{ opacity:0; transform:rotateY(80deg); } }
+  .wcard.fw{ border-color:rgba(192,86,63,.55); }
+  .wcard.fg{ border-color:rgba(111,174,143,.35); }
+  .wcard .w-wolfmark{ position:absolute; top:-8px; right:-6px; font-size:16px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.8)); }
+  .wav{ position:relative; display:inline-block; }
+  .wcard.dead .wav .pav{ filter:grayscale(1) brightness(.55); }
+  .wcard.dead .wav::after{ content:"✕"; position:absolute; inset:0; display:grid; place-items:center;
+    color:rgba(220,90,70,.9); font-size:22px; font-weight:700; }
+  .w-name{ font-size:13px; font-weight:600; display:flex; align-items:center; gap:4px; }
+  .w-no{ font-size:11px; color:var(--ink-faint); }
+  .w-role{ font-family:var(--serif); font-size:13px; letter-spacing:2px; color:var(--gold); }
+  .w-role.wolfr{ color:#e9a99c; }
+  .wcard.dead .w-name{ color:var(--ink-dim); }
+
+  /* 死因胶囊（复盘态直书真相；对局内的掩蔽版在夜卡里另有标注） */
+  .dchip{ height:17px; padding:0 7px; border-radius:9px; font-size:10px; line-height:15px;
+    background:#2a1815; color:#e0a89c; border:1px solid #5a2c26;
+    display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+  .dchip .xn{ font-size:9px; font-style:normal; font-weight:700; color:var(--vote-ink); }
+  .dchip.alive{ background:rgba(111,174,143,.12); border-color:#3b5748; color:var(--good); }
+
+  /* ---- 死亡缩略带（全局→局部最快导航：点跳 + 金色脉冲） ---- */
+  .strip{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:10px 14px;
+    background:var(--bg-1); border:1px solid var(--line); border-radius:10px; margin-bottom:28px;
+    font-size:12px; color:var(--ink-faint); }
+  .strip .s-lbl{ letter-spacing:2px; font-size:11px; flex:0 0 auto; }
+  .schip{ font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+    background:#2a1815; border:1px solid #5a2c26; color:#e0a89c; border-radius:999px;
+    padding:3px 10px; font-size:11.5px; transition:border-color var(--t-fast), color var(--t-fast); }
+  .schip:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .schip .xn{ font-size:9px; font-weight:700; color:var(--vote-ink); }
+  .s-arr{ color:var(--ink-faint); flex:0 0 auto; }
+
+  /* ============ 主体 · 垂直时间流（左缘贯穿竖线 + 节点圆点） ============ */
+  .flow{ position:relative; padding-left:26px; }
+  .flow::before{ content:""; position:absolute; left:8px; top:10px; bottom:10px; width:1px;
+    background:linear-gradient(180deg, transparent, var(--line) 36px, var(--line) calc(100% - 36px), transparent); }
+  .rwrap{ position:relative; margin-bottom:22px;
+    /* scroll-margin 必须写在点跳目标（id 所在的 .rwrap/#finale）本身，写在子元素 .rcard 上不生效 */
+    scroll-margin-top:calc(var(--demo-h) + var(--nav-h) + 16px); }
+  .rwrap::before{ content:""; position:absolute; left:-23px; top:22px; width:10px; height:10px; border-radius:50%;
+    background:var(--gold-soft); border:2px solid var(--bg-0); box-shadow:0 0 0 1px var(--gold-soft); }
+  .rcard{ border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .rcard.night{ background:var(--bg-1); }
+  .rcard.day{ background:var(--bg-2); position:relative; }
+  .rcard.day::before{ content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background:radial-gradient(620px 150px at 50% 0, rgba(216,178,90,.07), transparent); }
+  .rcard.fin{ background:var(--bg-1); border-color:rgba(184,149,74,.55); }
+  .rhead{ display:flex; align-items:center; gap:10px; padding:13px 18px 12px; border-bottom:1px solid var(--line);
+    font-family:var(--serif); font-size:16.5px; letter-spacing:3px; color:var(--gold); }
+  .rhead .askbtn{ margin-left:auto; font-family:var(--sans); font-size:11.5px; letter-spacing:0; cursor:pointer;
+    padding:4px 11px; border-radius:999px; border:1px solid var(--line); background:transparent; color:var(--ink-faint); }
+  .rhead .askbtn:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .rbody{ padding:14px 18px 16px; display:flex; flex-direction:column; gap:12px; }
+  .sec-t{ font-size:11px; letter-spacing:2px; color:var(--ink-faint); }
+
+  /* ---- 夜卡：行动真相区 ---- */
+  .arow{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:7px 10px;
+    background:rgba(0,0,0,.22); border:1px solid var(--line); border-radius:9px; font-size:13px; }
+  .mp{ display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .mp b{ font-weight:600; }
+  .mp .mp-no{ color:var(--ink-faint); font-size:11.5px; }
+  .mp-you{ background:var(--gold); color:#2a210c; font-size:9.5px; padding:0 4px; border-radius:6px;
+    line-height:13px; font-weight:700; flex:0 0 auto; }
+  .pav{ display:inline-grid; place-items:center; border-radius:50%; color:#1b1610; font-weight:700;
+    border:1px solid var(--line); flex:0 0 auto; user-select:none; }
+  .atk{ width:21px; height:21px; border-radius:50%; display:inline-grid; place-items:center;
+    font-size:11px; font-weight:700; border:1px solid var(--line); flex:0 0 auto; }
+  .atk-kill{ background:rgba(192,86,63,.16); border-color:#5a2c26; color:#d98a76; }
+  .atk-check{ background:rgba(91,145,201,.14); border-color:#33475e; color:var(--tk-guard); }
+  .atk-save{ background:rgba(68,178,166,.12); border-color:#2e5751; color:var(--tk-save); }
+  .atk-poison{ background:rgba(176,124,196,.14); border-color:#4f3a5c; color:var(--tk-poison); }
+  .atk-none{ background:var(--bg-3); border-color:var(--line); color:var(--ink-faint); }
+  .rb{ font-size:10.5px; padding:1px 7px; border-radius:8px; border:1px solid var(--line); white-space:nowrap; flex:0 0 auto; }
+  .rb-bad{ background:rgba(192,86,63,.15); border-color:#5a2c26; color:#e9a99c; }
+  .rb-good{ background:rgba(111,174,143,.14); border-color:#3b5748; color:var(--good); }
+  .rb-saved{ background:rgba(68,178,166,.12); border-color:#2e5751; color:var(--tk-save); }
+  .rb-poison{ background:rgba(176,124,196,.14); border-color:#4f3a5c; color:var(--tk-poison); }
+  .rb-plain{ background:rgba(0,0,0,.3); color:var(--ink-dim); }
+  .hid{ margin-left:auto; font-size:10px; color:var(--ink-faint); border:1px dashed var(--line);
+    border-radius:7px; padding:1px 6px; white-space:nowrap; flex:0 0 auto; }
+  .split{ width:100%; font-size:11.5px; color:var(--ink-dim); padding:5px 9px;
+    background:rgba(192,86,63,.06); border:1px dashed #5a2c26; border-radius:7px; }
+  .none-t{ color:var(--ink-dim); font-size:12.5px; }
+  .empty{ font-size:12px; color:var(--ink-faint); padding:6px 10px; border:1px dashed var(--line);
+    border-radius:8px; text-align:center; }
+
+  /* ---- 死亡结算横幅（毒杀行 = 全页最大戏剧点） ---- */
+  .dbn{ display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; padding:9px 12px; border-radius:9px;
+    background:#241315; border:1px solid #5a2c26; font-size:13.5px; }
+  .dbn .truth{ color:#e0a89c; font-weight:600; }
+  .dbn.poison{ border-color:var(--tk-poison); box-shadow:0 0 0 1px rgba(176,124,196,.22); }
+  .dbn.poison .truth{ color:var(--tk-poison); }
+  .dbn .masked{ width:100%; font-size:11px; color:var(--ink-faint); }
+  .peace{ text-align:center; font-family:var(--serif); color:var(--gold); letter-spacing:4px;
+    padding:10px 0 6px; font-size:15.5px; }
+  .peace small{ display:block; font-family:var(--sans); letter-spacing:1px; font-size:11px;
+    color:var(--ink-faint); margin-top:5px; }
+
+  /* ---- 叙事保底区（narrateEvent 兜底层；结构化区已覆盖的类型去重跳过） ---- */
+  .narr{ display:flex; flex-direction:column; gap:5px; border-top:1px dashed var(--line); padding-top:9px; }
+  .nline{ display:flex; align-items:baseline; gap:8px; font-size:12px; color:var(--ink-dim); }
+  .nline .dot{ width:6px; height:6px; border-radius:50%; flex:0 0 auto; transform:translateY(-1px); }
+  .nd-phase{ background:var(--ink-faint); } .nd-death{ background:var(--danger); }
+  .nd-vote{ background:var(--vote-ink); } .nd-words{ background:var(--gold-soft); } .nd-check{ background:var(--seat-3); }
+
+  /* ---- 天卡：死讯 / 开枪 / 发言 / 投票 ---- */
+  .annc{ display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; font-size:13.5px; padding:8px 11px;
+    border-radius:9px; background:rgba(216,178,90,.06); border:1px solid rgba(184,149,74,.35); }
+  .shot{ display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; font-size:13.5px; padding:8px 11px;
+    border-radius:9px; background:rgba(192,86,63,.08); border:1px solid #5a2c26; }
+  .endnote{ font-size:12.5px; color:var(--gold); padding:8px 11px; border-radius:9px; text-align:center;
+    background:rgba(216,178,90,.07); border:1px solid rgba(184,149,74,.4); letter-spacing:1px; }
+
+  .sp-list{ display:flex; flex-direction:column; gap:4px; }
+  .sp{ border:1px solid var(--line); border-radius:9px; background:rgba(0,0,0,.18); }
+  .sp summary, .sp .sp-sum{ list-style:none; display:flex; align-items:center; gap:7px;
+    padding:6px 10px; font-size:12.5px; min-width:0; }
+  .sp summary{ cursor:pointer; }
+  .sp summary::-webkit-details-marker{ display:none; }
+  .sp .excerpt{ color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+  .sp .exp{ font-size:10px; color:var(--ink-faint); flex:0 0 auto; }
+  .sp[open] .excerpt, .sp[open] .exp{ display:none; }
+  .sp .full{ padding:2px 12px 10px 43px; font-size:13px; line-height:1.7; color:var(--ink); }
+  .sp-tag{ font-size:9.5px; padding:0 5px; border-radius:6px; background:var(--vote-bg);
+    border:1px solid var(--vote-line); color:var(--vote-ink); flex:0 0 auto; line-height:15px; }
+  .sp.lastw{ border-color:rgba(184,149,74,.5); }
+  .sp.lastw .sp-tag{ background:rgba(216,178,90,.1); border-color:var(--gold-soft); color:var(--gold); }
+
+  /* ---- 投票区：蓝灰 vote 皮（与对局内投票视觉同源；复盘全在 vote_resolved 之后，保密红线不约束） ---- */
+  .vblock{ background:var(--vote-bg); border:1px solid var(--vote-line); border-radius:10px;
+    padding:10px 13px 11px; color:var(--vote-ink); overflow-x:auto; }
+  .v-sub{ font-size:11px; letter-spacing:1px; opacity:.75; margin:3px 0 6px; }
+  .vg{ display:flex; align-items:center; gap:7px; padding:4px 2px; font-size:13px; flex-wrap:wrap; }
+  .vg .vg-arr{ opacity:.55; flex:0 0 auto; }
+  .vg .vg-n{ font-weight:700; color:var(--gold); flex:0 0 auto; }
+  .vg .vg-sep{ opacity:.35; flex:0 0 auto; }
+  .vg-chips{ display:flex; padding-left:5px; }
+  .vg-chips .pav{ margin-left:-5px; border-color:var(--vote-bg); }
+  .vg-names{ display:none; opacity:.85; font-size:12px; }
+  .vg.abs{ opacity:.6; font-size:12px; }
+  .vg-exiled .vg-n{ color:#e9a99c; }
+  .tie-div{ display:flex; align-items:center; gap:10px; margin:9px 0 7px; font-size:11.5px; letter-spacing:2px; }
+  .tie-div::before, .tie-div::after{ content:""; flex:1; height:1px; background:var(--vote-line); }
+  .vblock .sp{ background:rgba(0,0,0,.22); border-color:var(--vote-line); margin:3px 0; }
+  .vres{ margin-top:9px; padding:8px 11px; border-radius:8px; background:rgba(0,0,0,.28);
+    border:1px solid var(--vote-line); font-size:13.5px; color:var(--ink); }
+  .vres .fw{ color:#e9a99c; font-weight:700; } .vres .fg{ color:var(--good); font-weight:700; }
+  .v-note{ margin-top:7px; font-size:10.5px; opacity:.5; }
+
+  /* 金色脉冲（死亡缩略带点跳落点，1.2s 单次） */
+  .pulse-hl{ animation:goldPulse 1.2s ease-out 1; }
+  @keyframes goldPulse{
+    0%{ box-shadow:0 0 0 0 rgba(216,178,90,0); }
+    25%{ box-shadow:0 0 0 4px rgba(216,178,90,.75); }
+    100%{ box-shadow:0 0 0 14px rgba(216,178,90,0); } }
+
+  /* ---- 终局卡 ---- */
+  .fin-line{ font-family:var(--serif); font-size:17px; letter-spacing:2px; color:var(--gold); text-wrap:balance; }
+  .fin-sub{ font-size:12.5px; color:var(--ink-dim); }
+  .fin-alive{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px; }
+
+  /* ---- 幕后问答（主位固定区块；不做侧栏/抽屉） ---- */
+  .qa{ scroll-margin-top:calc(var(--demo-h) + var(--nav-h) + 16px); margin-top:30px;
+    border:1px solid var(--vote-line); border-radius:var(--radius); background:var(--bg-1); padding:16px 18px 18px; }
+  .qa h3{ font-family:var(--serif); letter-spacing:3px; color:var(--gold); margin:0 0 3px; font-size:16.5px; }
+  .qa .qa-note{ font-size:11px; color:var(--ink-faint); margin-bottom:13px; }
+  .qlog{ display:flex; flex-direction:column; }
+  .qmsg{ max-width:86%; padding:8px 13px; border-radius:11px; font-size:13.5px; line-height:1.65; margin-bottom:8px; }
+  .qmsg.q{ margin-left:auto; background:#2f3a2a; border:1px solid #41502f; }
+  .qmsg.a{ margin-right:auto; background:var(--bg-2); border:1px solid var(--gold-soft); }
+  .typing{ display:inline-flex; gap:3px; align-items:center; }
+  .typing .dot{ width:4px; height:4px; border-radius:50%; background:var(--gold-soft); animation:blink 1.2s infinite both; }
+  .typing .dot:nth-child(2){ animation-delay:.2s; } .typing .dot:nth-child(3){ animation-delay:.4s; }
+  @keyframes blink{ 0%,80%,100%{ opacity:.2; } 40%{ opacity:1; } }
+  .chips{ display:flex; flex-wrap:wrap; gap:7px; margin:12px 0 9px; }
+  .chips .c-lbl{ font-size:11px; color:var(--ink-faint); align-self:center; }
+  .chip{ font:inherit; font-size:12px; cursor:pointer; padding:5px 11px; border-radius:999px;
+    border:1px solid var(--vote-line); background:rgba(29,37,48,.5); color:var(--vote-ink); }
+  .chip:hover{ border-color:var(--gold-soft); color:var(--gold); }
+  .qa-input{ display:flex; gap:8px; }
+  .qa-input input{ flex:1; min-width:0; font:inherit; font-size:13.5px; background:var(--bg-0);
+    border:1px solid var(--line); border-radius:9px; color:var(--ink); padding:9px 12px; outline:none; }
+  .qa-input input:focus{ border-color:var(--gold-soft); }
+  .qa-input input::placeholder{ color:var(--ink-faint); }
+
+  /* ---- 按钮行 ---- */
+  .btn{ font:inherit; cursor:pointer; padding:9px 22px; border-radius:var(--radius-sm);
+    border:1px solid var(--gold-soft); color:#2a210c; font-weight:600;
+    background:linear-gradient(180deg,#d8b25a,#b8954a); }
+  .btn:hover{ filter:brightness(1.05); }
+  .btn.ghost{ background:transparent; color:var(--ink-dim); border-color:var(--line); font-weight:500; }
+  .btn.ghost:hover{ border-color:var(--gold-soft); color:var(--gold); filter:none; }
+  .btnrow{ display:flex; gap:10px; justify-content:center; align-items:center; margin-top:26px; flex-wrap:wrap; }
+  .btnrow .brnote{ width:100%; text-align:center; font-size:11px; color:var(--ink-faint); }
+
+  /* ============ 窄屏塌叠（≤820px） ============ */
+  @media (max-width:820px){
+    :root{ --nav-h:32px; }
+    .page{ padding:16px 14px 70px; }
+    .np{ font-size:12px; padding:2px 9px 1px; }
+    .np-conn{ width:9px; }
+    .banner{ padding:24px 14px 18px; }
+    .banner .b-title{ font-size:23px; letter-spacing:4px; }
+    .wall{ grid-template-columns:repeat(auto-fit, minmax(94px, 1fr)); gap:7px; }
+    .w-role{ font-size:12px; }
+    .flow{ padding-left:18px; }
+    .flow::before{ left:4px; }
+    .rwrap::before{ left:-19px; width:8px; height:8px; }
+    .rhead{ padding:11px 13px 10px; font-size:15px; letter-spacing:2px; }
+    .rbody{ padding:12px 12px 14px; }
+    /* 票型分组：mini 头像链退化为纯文案「3号·1号·7号」 */
+    .vg-chips{ display:none; }
+    .vg-names{ display:inline; }
+    .hid{ display:none; }
+    .qmsg{ max-width:94%; }
+  }
+
+  /* 可达性：reduce 时全部翻面/脉冲/平滑滚动一帧直出终态（JS 同步降级 smooth→auto） */
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <strong>阶段5 · 复盘时间线「真相卷轴」</strong>
+  <button class="sc-btn on" data-sc="good">① 好人胜（7人 · 2夜2天）</button>
+  <button class="sc-btn" data-sc="wolf">② 狼人胜（屠神线 · 2夜2天）</button>
+  <button class="sc-btn" data-sc="quick">③ 5人局速胜（1夜1天）</button>
+  <span class="spacer"></span>
+  <span class="lbl nb">←/→ 切轮次 · Home/End 首尾 · 静态假数据</span>
+</div>
+
+<nav class="navbar" id="navbar"><div class="nav-inner" id="nav-inner"></div></nav>
+
+<div class="page" id="page"></div>
+
+<script>
+/* =====================================================================
+   假数据剧本（对应 deriveRoundArchives 的派生结构，UI 只消费此结构）。
+   seat 与 playerId 故意解耦（真人=human-1 坐 3号），页内一切「N号」都
+   来自数据里的 seat 字段——落地时同样绝不解析 playerId 后缀。
+   ===================================================================== */
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const seatColor = s => `var(--seat-${((s - 1) % 6) + 1})`;
+
+const SCRIPTS = {
+  /* ---------- ① 7人标准局 · 好人胜（默认剧本） ---------- */
+  good: {
+    winner: 'good',
+    winTitle: '好人阵营获胜',
+    winReason: 'all_werewolves_dead',
+    winReasonText: '所有狼人出局',
+    boardNote: '7人标准局（2狼 · 预言家 · 女巫 · 猎人 · 2平民）· 2夜2天',
+    players: {
+      1: { name: '林川', ch: '林', role: '女巫',   faction: 'good' },
+      2: { name: '阿岚', ch: '岚', role: '狼人',   faction: 'wolf',
+           death: { label: '枪·天2', tip: '第2天 被猎人开枪带走' } },
+      3: { name: '苏晴', ch: '苏', role: '预言家', faction: 'good', human: true },
+      4: { name: '乔木', ch: '乔', role: '平民',   faction: 'good',
+           death: { label: '毒·夜2', tip: '第2夜 被女巫毒杀（对局中显示为夜里出局）' } },
+      5: { name: '小满', ch: '满', role: '平民',   faction: 'good' },
+      6: { name: '老周', ch: '周', role: '狼人',   faction: 'wolf',
+           death: { label: '逐·天1', xn: '×4', tip: '第1天 被放逐（4票）' } },
+      7: { name: '沈舟', ch: '沈', role: '猎人',   faction: 'good',
+           death: { label: '刀·夜2', tip: '第2夜 被狼人袭击出局' } },
+    },
+    deathOrder: [
+      { seat: 6, label: '逐·天1', xn: '×4', target: 'd-seat6' },
+      { seat: 7, label: '刀·夜2',            target: 'd-seat7' },
+      { seat: 4, label: '毒·夜2',            target: 'd-seat4' },
+      { seat: 2, label: '枪·天2',            target: 'd-seat2' },
+    ],
+    rounds: [
+      { kind: 'night', n: 1, dots: [],
+        actions: [
+          { type: 'kill',  actor: 6, target: 5, saved: true,
+            split: '狼队分歧：6号老周 刀 5号 ／ 2号阿岚 刀 3号 → 归票 5号（wolfVotes 展开）' },
+          { type: 'check', actor: 3, target: 6, bad: true },
+          { type: 'save',  actor: 1, target: 5 },
+        ],
+        peace: true,
+        narr: [
+          { cls: 'phase', text: '天黑请闭眼 — 第 1 夜开始' },
+          { cls: 'phase', text: '夜晚行动全部结算，天亮了' },
+        ] },
+      { kind: 'day', n: 1, dots: [{ seat: 6, tip: '天1 · 6号老周被放逐' }],
+        announce: '天亮 — 昨夜是平安夜，无人出局',
+        speeches: [
+          { seat: 1, text: '平安夜信息不多：要么女巫开了药，要么狼人空刀骗药。后置位多给点态度，我先听一轮。' },
+          { seat: 2, text: '我是村民。平安夜别急着乐观，也可能是狼人自刀骗解药。今天重点听有没有人跳神职。' },
+          { seat: 3, text: '我是预言家！昨晚查验 6号老周，结果是查杀。我没有任何理由第一天就悍跳送死，今天请大家跟我归票 6号，明晚我再交一个查验结果出来给大家验证。' },
+          { seat: 4, text: '3号跳得很果断，但只有一个查杀、没有对跳，我持保留意见，先不站边。' },
+          { seat: 5, text: '没人和 3号 对跳，这个预言家的成色就不低。我站 3号，跟票 6号。' },
+          { seat: 6, text: '我是好人！3号这是狼人悍跳，随便甩一个查杀就想带走一个平民。大家冷静，我反票 3号。' },
+          { seat: 7, text: '末位归票：3号和 6号 必有一狼。没人对跳的预言家我选择先信——归票 6号，请大家别分票。' },
+        ],
+        votes: [
+          { sub: '首轮投票',
+            groups: [ { t: 6, voters: [3, 1, 7] }, { t: 3, voters: [6, 2, 5] } ],
+            abstain: [4],
+            banner: { type: 'tie', text: '平票：6号 3票 ／ 3号 3票 — 双方发表拉票后进入加赛' } },
+          /* 加赛 = tie_break voteState：eligibleVoterIds 仍为全体存活者（含被平票的 3号/6号，仅禁自投），
+             全员投完才结算 —— tally 必须凑满 7 张票（含弃票行） */
+          { sub: '加赛投票（全员参与 · 仅不可投自己）',
+            groups: [ { t: 6, voters: [3, 1, 5, 7] }, { t: 3, voters: [6, 2] } ],
+            abstain: [4],
+            banner: { type: 'exile', seat: 6, n: 4 } },
+        ],
+        tieSpeeches: [
+          { seat: 6, text: '再想想！放逐我这个村民，狼人今晚直接躺赢。我是民！', tag: '拉票' },
+          { seat: 3, text: '我是真预言家，票掉我等于送狼人两个晚上。相信查杀，票 6号。', tag: '拉票' },
+        ],
+        lastWords: { seat: 6, text: '输给真预言家不冤。别浪费我这张牌，好人加油吧。' },
+        narr: [ { cls: 'vote', text: '放逐结果公布，进入黑夜' } ] },
+      { kind: 'night', n: 2,
+        dots: [ { seat: 7, tip: '夜2 · 7号沈舟出局' }, { seat: 4, tip: '夜2 · 4号乔木出局' } ],
+        actions: [
+          { type: 'kill',   actor: 2, target: 7, saved: false },
+          { type: 'check',  actor: 3, target: 2, bad: true },
+          { type: 'poison', actor: 1, target: 4 },
+        ],
+        deaths: [
+          { seat: 7, truth: '狼人夜刀' },
+          { seat: 4, truth: '女巫毒杀', poison: true },
+        ],
+        narr: [ { cls: 'phase', text: '狼人只剩 2号 一人，独自出刀' } ] },
+      { kind: 'day', n: 2, dots: [{ seat: 2, tip: '天2 · 2号阿岚被开枪带走' }],
+        announce: '天亮 — 昨夜 7号沈舟、4号乔木 出局（对局中不公布死法）',
+        hunterShot: { hunter: 7, target: 2 },
+        endNote: '狼人全部出局 — 达成胜负即终局：跳过发言与投票，直接进入复盘',
+        narr: [
+          { cls: 'death', text: '2号阿岚 倒下，真身狼人' },
+          { cls: 'phase', text: '游戏结束' },
+        ] },
+    ],
+    alive: [3, 1, 5],
+    finaleNarr: '猎人拂晓开枪带走最后一名狼人，好人屠边收官。',
+    qaPreset: {
+      q: '第2夜女巫为什么毒 4号乔木？',
+      a: '从女巫（1号林川）的复盘视角看：天1里 4号 是唯一弃票、又公开质疑真预言家的人，被她标成了最可疑位。可惜这是误判——4号只是谨慎的平民。更稳的打法是再留一晚毒，或者把毒指向被查杀后反咬的位置。',
+    },
+  },
+
+  /* ---------- ② 7人标准局 · 狼人胜（屠神线：all_gods_dead）
+       屠边规则（winConditionMode=slay_side）下狼胜只有两条路：屠尽平民 / 屠尽神职。
+       本剧本走屠神线：天1放逐真预言家（悍跳反杀）→ 夜2刀女巫 + 女巫毒错猎人 →
+       三神全灭，天亮即终局（平民 4/5 号仍存活，不触发屠民）。 ---------- */
+  wolf: {
+    winner: 'wolf',
+    winTitle: '狼人阵营获胜',
+    winReason: 'all_gods_dead',
+    winReasonText: '屠尽所有神职',
+    boardNote: '7人标准局（2狼 · 预言家 · 女巫 · 猎人 · 2平民）· 2夜2天',
+    players: {
+      1: { name: '林川', ch: '林', role: '女巫',   faction: 'good',
+           death: { label: '刀·夜2', tip: '第2夜 被狼人袭击出局' } },
+      2: { name: '阿岚', ch: '岚', role: '狼人',   faction: 'wolf' },
+      3: { name: '苏晴', ch: '苏', role: '预言家', faction: 'good', human: true,
+           death: { label: '逐·天1', xn: '×4', tip: '第1天 被放逐（4票）' } },
+      4: { name: '乔木', ch: '乔', role: '平民',   faction: 'good' },
+      5: { name: '小满', ch: '满', role: '平民',   faction: 'good' },
+      6: { name: '老周', ch: '周', role: '狼人',   faction: 'wolf' },
+      7: { name: '沈舟', ch: '沈', role: '猎人',   faction: 'good',
+           death: { label: '毒·夜2', tip: '第2夜 被女巫毒杀（对局中显示为夜里出局）' } },
+    },
+    deathOrder: [
+      { seat: 3, label: '逐·天1', xn: '×4', target: 'd-seat3' },
+      { seat: 1, label: '刀·夜2',            target: 'd-seat1' },
+      { seat: 7, label: '毒·夜2',            target: 'd-seat7' },
+    ],
+    rounds: [
+      { kind: 'night', n: 1, dots: [],
+        actions: [
+          { type: 'kill',  actor: 6, target: 4, saved: true,
+            split: '狼队分歧：6号老周 刀 4号 ／ 2号阿岚 刀 7号 → 归票 4号（wolfVotes 展开）' },
+          { type: 'check', actor: 3, target: 2, bad: true },
+          { type: 'save',  actor: 1, target: 4 },
+        ],
+        peace: true,
+        narr: [
+          { cls: 'phase', text: '天黑请闭眼 — 第 1 夜开始' },
+          { cls: 'phase', text: '夜晚行动全部结算，天亮了' },
+        ] },
+      { kind: 'day', n: 1, dots: [{ seat: 3, tip: '天1 · 3号苏晴被放逐' }],
+        announce: '天亮 — 昨夜是平安夜，无人出局',
+        speeches: [
+          { seat: 1, text: '平安夜，药大概率已经动过了。今天重点听跳预言家的成色，别急着定票。' },
+          { seat: 2, text: '我是村民。平安夜信息少，谁的发言急着带票，谁就可疑。' },
+          { seat: 3, text: '我是预言家，昨晚查验 2号阿岚，是查杀！2号那句「谁带票谁可疑」就是提前打补丁。今天请归票 2号。' },
+          { seat: 4, text: '3号跳得挺稳，但我先听完对跳再说——万一有反跳呢。' },
+          { seat: 5, text: '两个预言家……我分不清，谁的查杀链更顺我票谁。6号后跳但讲得也圆。' },
+          { seat: 6, text: '我才是预言家！昨晚查验 3号苏晴，查杀！她抢跳就是怕我今天报她。我出这一局唯一的真查杀，归票 3号。' },
+          { seat: 7, text: '末位难办：3号先跳、6号后跳反咬，五五开。6号敢直接对着查杀反跳，我倾向他是真的——归票 3号。' },
+        ],
+        votes: [
+          { sub: '首轮投票',
+            groups: [ { t: 3, voters: [6, 2, 5, 7] }, { t: 2, voters: [3, 1] } ],
+            abstain: [4],
+            banner: { type: 'exile', seat: 3, n: 4 } },
+        ],
+        lastWords: { seat: 3, text: '我是真预言家……2号是查杀，6号是悍跳狼。记住我的话，明天你们会后悔的。' },
+        narr: [ { cls: 'vote', text: '放逐结果公布，进入黑夜' } ] },
+      { kind: 'night', n: 2,
+        dots: [ { seat: 1, tip: '夜2 · 1号林川出局' }, { seat: 7, tip: '夜2 · 7号沈舟出局' } ],
+        actions: [
+          { type: 'kill',   actor: 6, target: 1, saved: false,
+            split: '狼队一致：6号老周 刀 1号 ／ 2号阿岚 刀 1号 → 归票 1号' },
+          { type: 'poison', actor: 1, target: 7 },
+        ],
+        deaths: [
+          { seat: 1, truth: '狼人夜刀' },
+          { seat: 7, truth: '女巫毒杀', poison: true, extra: '猎人被毒杀 · 无法开枪' },
+        ],
+        narr: [
+          { cls: 'check', text: '预言家已出局 — 本夜无查验环节' },
+          { cls: 'phase', text: '女巫先递出毒药，随后自己倒在狼刀下 — 夜晚行动全部结算，天亮了' },
+        ] },
+      { kind: 'day', n: 2, dots: [],
+        announce: '天亮 — 昨夜 1号林川、7号沈舟 出局（对局中不公布死法）',
+        endNote: '预言家、女巫、猎人全部出局 — 屠边达成（神职侧全灭），狼人阵营获胜，直接进入复盘',
+        narr: [ { cls: 'phase', text: '游戏结束' } ] },
+    ],
+    alive: [6, 2, 4, 5],
+    finaleNarr: '悍跳反杀真预言家，女巫的毒又错交给了猎人——三神全灭，屠边收官。',
+    qaPreset: {
+      q: '好人这局输在哪一步？',
+      a: '天1把真预言家 3号 投出局是最大的分水岭：6号 敢对着查杀反跳，赌的就是「后跳更像真」的心理。夜2女巫再把毒交给 7号猎人（她把末位归票的猎人当成了第三只狼），等于亲手拆掉好人最后的翻盘按钮——三张神牌一夜之间清零，屠边直接达成。',
+    },
+  },
+
+  /* ---------- ③ 5人回归局 · 天1放逐即终局（验证节点稀少 + 铁律③） ---------- */
+  quick: {
+    winner: 'good',
+    winTitle: '好人阵营获胜',
+    winReason: 'all_werewolves_dead',
+    winReasonText: '所有狼人出局',
+    boardNote: '5人回归局（1狼 · 预言家 · 3平民）· 1夜1天 · 放逐达成胜负即终局',
+    players: {
+      1: { name: '林川', ch: '林', role: '平民',   faction: 'good' },
+      2: { name: '阿岚', ch: '岚', role: '狼人',   faction: 'wolf',
+           death: { label: '逐·天1', xn: '×3', tip: '第1天 被放逐（3票）' } },
+      3: { name: '苏晴', ch: '苏', role: '预言家', faction: 'good', human: true },
+      4: { name: '乔木', ch: '乔', role: '平民',   faction: 'good',
+           death: { label: '刀·夜1', tip: '第1夜 被狼人袭击出局' } },
+      5: { name: '小满', ch: '满', role: '平民',   faction: 'good' },
+    },
+    deathOrder: [
+      { seat: 4, label: '刀·夜1',            target: 'd-seat4' },
+      { seat: 2, label: '逐·天1', xn: '×3', target: 'd-seat2' },
+    ],
+    rounds: [
+      { kind: 'night', n: 1, dots: [{ seat: 4, tip: '夜1 · 4号乔木出局' }],
+        actions: [
+          { type: 'kill',  actor: 2, target: 4, saved: false },
+          { type: 'check', actor: 3, target: 2, bad: true },
+        ],
+        emptyNote: '本板无女巫与猎人 — 无用药、无开枪环节',
+        deaths: [ { seat: 4, truth: '狼人夜刀' } ],
+        narr: [ { cls: 'phase', text: '天黑请闭眼 — 第 1 夜开始' } ] },
+      { kind: 'day', n: 1, dots: [{ seat: 2, tip: '天1 · 2号阿岚被放逐' }],
+        announce: '天亮 — 昨夜 4号乔木 出局',
+        speeches: [
+          { seat: 3, text: '我是预言家，昨晚查验 2号阿岚，查杀！5人局只有一只狼，今天票 2号 直接结束游戏。' },
+          { seat: 1, text: '5人局没人对跳就是真预言家。跟票 2号。' },
+          { seat: 5, text: '同意，归票 2号，别给狼人拖到晚上的机会。' },
+          { seat: 2, text: '你们就不怕他查错人？行吧，我是民，票我就是输。' },
+        ],
+        votes: [
+          { sub: '首轮投票',
+            groups: [ { t: 2, voters: [3, 1, 5] }, { t: 3, voters: [2] } ],
+            abstain: [],
+            banner: { type: 'exile', seat: 2, n: 3 } },
+        ],
+        endNote: '放逐达成胜负即终局（规则铁律③）— 跳过遗言与猎人环节，直接进入复盘',
+        narr: [ { cls: 'phase', text: '游戏结束' } ] },
+    ],
+    alive: [3, 1, 5],
+    finaleNarr: '真预言家首日硬跳查杀，一轮归票速胜。',
+    qaPreset: {
+      q: '5人局这种没对跳的查杀还需要多想吗？',
+      a: '基本不用。5人局只有一只狼，狼如果悍跳预言家必然出现对跳；无人对跳时，唯一跳神者为真的概率极高。这局大家的处理（不分票、当天归票收尾）就是标准答案。',
+    },
+  },
+};
+
+/* ===================== 渲染 ===================== */
+let CUR = 'good', S = null, P = null;
+let SECS = [], curId = 'prologue', qaCtx = null;
+
+const pav = (s, size) => {
+  const p = P[s];
+  return `<span class="pav" style="width:${size}px;height:${size}px;font-size:${Math.round(size * .5)}px;background:${seatColor(s)}">${p.ch}</span>`;
+};
+const mp = s => {
+  const p = P[s];
+  return `<span class="mp">${pav(s, 20)}<b style="color:${seatColor(s)}">${p.name}</b><span class="mp-no">${s}号</span>${p.human ? '<span class="mp-you">你</span>' : ''}</span>`;
+};
+const nm = s => `<b class="nb" style="color:${seatColor(s)}">${s}号${P[s].name}</b>`;
+const dchipHtml = d => `<span class="dchip">${d.label}${d.xn ? ` <i class="xn">${d.xn}</i>` : ''}</span>`;
+
+function renderHero() {
+  const wall = Object.keys(P).map((s, i) => {
+    const p = P[+s];
+    const dead = !!p.death;
+    return `<div class="wcard ${p.faction === 'wolf' ? 'fw' : 'fg'} ${dead ? 'dead' : ''}" style="--i:${i}">
+      ${p.faction === 'wolf' ? '<span class="w-wolfmark">🐺</span>' : ''}
+      <span class="wav">${pav(+s, 46)}</span>
+      <div class="w-name">${p.name}${p.human ? '<span class="mp-you">你</span>' : ''}</div>
+      <div class="w-no">${s}号</div>
+      <div class="w-role ${p.faction === 'wolf' ? 'wolfr' : ''}">${p.role}</div>
+      ${dead ? dchipHtml(p.death) : '<span class="dchip alive">存活</span>'}
+    </div>`;
+  }).join('');
+  const strip = S.deathOrder.length
+    ? S.deathOrder.map(d =>
+        `<button class="schip" data-target="${d.target}" title="点击跳转到对应轮次">☠ ${d.seat}号${P[d.seat].name} · ${d.label}${d.xn ? ` <i class="xn">${d.xn}</i>` : ''}</button>`
+      ).join('<span class="s-arr">→</span>')
+    : '<span>本局无人出局</span>';
+  return `<section class="hero" id="prologue">
+    <div class="banner ${S.winner === 'wolf' ? 'win-wolf' : 'win-good'}">
+      <div class="b-kicker">— 复 盘 · 真 相 卷 轴 —</div>
+      <div class="b-title">${S.winner === 'wolf' ? '🐺 ' : '🌾 '}${S.winTitle}</div>
+      <div class="b-sub">${S.winReasonText}（${S.winReason}）· ${S.boardNote}</div>
+      <div class="b-hint">身份与死因已全部揭示 · 点击时间轴节点或死亡时序可跳转对应轮次</div>
+    </div>
+    <div class="wall">${wall}</div>
+    <div class="strip"><span class="s-lbl">死亡时序</span>${strip}</div>
+  </section>`;
+}
+
+function actRow(a) {
+  if (a.type === 'none') {
+    return `<div class="arow">${mp(a.actor)}<span class="atk atk-none">空</span><span class="none-t">${a.text}</span><span class="hid">对局中隐藏</span></div>`;
+  }
+  let tk = '', res = '';
+  if (a.type === 'kill') {
+    tk = '<span class="atk atk-kill">刀</span>';
+    res = a.saved ? '<span class="rb rb-saved">未死 · 被救</span>' : '<span class="rb rb-plain">得手</span>';
+  } else if (a.type === 'check') {
+    tk = '<span class="atk atk-check">验</span>';
+    res = a.bad ? '<span class="rb rb-bad">查杀</span>' : '<span class="rb rb-good">金水</span>';
+  } else if (a.type === 'save') {
+    tk = '<span class="atk atk-save">救</span>';
+    res = '<span class="rb rb-saved">解药</span>';
+  } else if (a.type === 'poison') {
+    tk = '<span class="atk atk-poison">毒</span>';
+    res = '<span class="rb rb-poison">毒杀</span>';
+  }
+  return `<div class="arow">${mp(a.actor)}${tk}${mp(a.target)}${res}${a.note ? `<span class="rb rb-plain">${a.note}</span>` : ''}<span class="hid">对局中隐藏</span>${a.split ? `<div class="split">🐺 ${a.split}</div>` : ''}</div>`;
+}
+
+function narrHtml(narr) {
+  if (!narr || !narr.length) return '';
+  return `<div class="narr"><div class="sec-t" style="margin-bottom:2px">其余事件 · 叙事保底</div>` +
+    narr.map(l => `<div class="nline"><i class="dot nd-${l.cls}"></i><span>${l.text}</span></div>`).join('') + '</div>';
+}
+
+function spRow(s, extraCls) {
+  const p = P[s.seat];
+  const tag = s.tag ? `<span class="sp-tag">${s.tag}</span>` : '';
+  const long = s.text.length > 42;
+  if (!long) {
+    return `<div class="sp ${extraCls || ''}"><div class="sp-sum">${mp(s.seat)}${tag}<span class="excerpt">${s.text}</span></div></div>`;
+  }
+  return `<details class="sp ${extraCls || ''}"><summary>${mp(s.seat)}${tag}<span class="excerpt">${s.text.slice(0, 40)}…</span><span class="exp">展开全文 ▾</span></summary><div class="full">${s.text}</div></details>`;
+}
+
+function voteGroupRow(g, exiled) {
+  const p = P[g.t];
+  const chips = g.voters.map(v => `<span title="${v}号 ${P[v].name}">${pav(v, 16)}</span>`).join('');
+  const names = g.voters.map(v => `${v}号`).join('·');
+  return `<div class="vg ${exiled ? 'vg-exiled' : ''}">
+    <span class="vg-arr">→</span>${pav(g.t, 18)}<b class="nb" style="color:${seatColor(g.t)}">${g.t}号${p.name}</b>
+    <span class="vg-n">×${g.voters.length}</span><span class="vg-sep">｜</span>
+    <span class="vg-chips">${chips}</span><span class="vg-names">${names}</span>
+  </div>`;
+}
+
+function voteBlock(r) {
+  if (!r.votes || !r.votes.length) return '';
+  let html = '<div class="vblock">';
+  let resultRow = '';
+  r.votes.forEach((vr, i) => {
+    html += `<div class="v-sub">🗳️ ${vr.sub}</div>`;
+    const exiledSeat = vr.banner.type === 'exile' ? vr.banner.seat : -1;
+    vr.groups.forEach(g => { html += voteGroupRow(g, g.t === exiledSeat); });
+    if (vr.abstain && vr.abstain.length) {
+      const names = vr.abstain.map(v => `${v}号${P[v].name}`).join('·');
+      html += `<div class="vg abs"><span class="vg-arr">→</span><span>弃票</span><span class="vg-n" style="color:inherit">×${vr.abstain.length}</span><span class="vg-sep">｜</span><span class="vg-names" style="display:inline">${names}</span></div>`;
+    }
+    if (vr.banner.type === 'tie') {
+      html += `<div class="tie-div">平票 · 加赛</div>`;
+      html += `<div style="font-size:11px;opacity:.7;margin-bottom:4px">${vr.banner.text}</div>`;
+      (r.tieSpeeches || []).forEach(ts => { html += spRow(ts); });
+    } else if (vr.banner.type === 'exile') {
+      const p = P[vr.banner.seat];
+      const fac = p.faction === 'wolf' ? '<span class="fw">狼人</span>' : `<span class="fg">${p.role}（好人）</span>`;
+      resultRow = `<div class="vres" id="d-seat${vr.banner.seat}">⚖ ${nm(vr.banner.seat)} 被放逐（${vr.banner.n}票）— 真身：${fac}</div>`;
+    } else if (vr.banner.type === 'none') {
+      resultRow = `<div class="vres">⚖ 平票 · 无人放逐，直接入夜</div>`;
+    }
+  });
+  html += resultRow;
+  html += `<div class="v-note">票数取自 vote_resolved.tally · 复盘态在 vote_resolved 之后，保密红线不约束</div>`;
+  html += '</div>';
+  return html;
+}
+
+function roundCard(r) {
+  const id = `round-${r.kind}-${r.n}`;
+  const label = r.kind === 'night' ? `第 ${r.n} 夜` : `第 ${r.n} 天`;
+  const icon = r.kind === 'night' ? '☾' : '☀';
+  let body = '';
+  if (r.kind === 'night') {
+    body += `<div class="sec-t">行动真相</div>` + r.actions.map(actRow).join('');
+    if (r.emptyNote) body += `<div class="empty">${r.emptyNote}</div>`;
+    body += `<div class="sec-t" style="margin-top:4px">死亡结算</div>`;
+    if (r.peace) {
+      body += `<div class="peace">🌙 平安夜<small>昨夜无人出局 — 刀被解药挡下（真相仅复盘可见）</small></div>`;
+    } else {
+      body += (r.deaths || []).map(d =>
+        `<div class="dbn ${d.poison ? 'poison' : ''}" id="d-seat${d.seat}">☠ ${nm(d.seat)} 出局 — <span class="truth">真相：${d.truth}</span>${d.extra ? `<span class="rb rb-poison">${d.extra}</span>` : ''}${d.poison ? '<span class="masked">对局中显示为：夜里出局（死法不公布 · 规则铁律② · 复盘揭示真相）</span>' : ''}</div>`
+      ).join('');
+    }
+  } else {
+    body += `<div class="annc">☀ ${r.announce}</div>`;
+    if (r.hunterShot) {
+      const hs = r.hunterShot;
+      body += `<div class="shot" id="d-seat${hs.target}">🔫 ${nm(hs.hunter)} 亮出猎人身份，开枪带走 ${nm(hs.target)} — 真身：<b style="color:#e9a99c">狼人</b></div>`;
+    }
+    if (r.speeches && r.speeches.length) {
+      body += `<div class="sec-t">发言（点击展开全文）</div><div class="sp-list">${r.speeches.map(s => spRow(s)).join('')}</div>`;
+    }
+    body += voteBlock(r);
+    if (r.lastWords) {
+      body += `<div class="sec-t">遗言</div>` + spRow({ ...r.lastWords, tag: '遗言' }, 'lastw');
+    }
+    if (r.endNote) body += `<div class="endnote">🏁 ${r.endNote}</div>`;
+  }
+  body += narrHtml(r.narr);
+  return `<section class="rwrap" id="${id}"><div class="rcard ${r.kind}">
+    <div class="rhead">${icon} ${label}<button class="askbtn" data-round="${label.replace(/ /g, '')}">问这一轮</button></div>
+    <div class="rbody">${body}</div>
+  </div></section>`;
+}
+
+function renderFinale() {
+  const alive = S.alive.map(s => `<span class="mp">${pav(s, 20)}${nm(s)}</span>`).join('');
+  return `<section class="rwrap" id="finale"><div class="rcard fin">
+    <div class="rhead">🏆 终局</div>
+    <div class="rbody">
+      <div class="fin-line">${S.winTitle} — ${S.winReasonText}</div>
+      <div class="fin-sub">winReason = ${S.winReason} · ${S.finaleNarr}</div>
+      <div class="fin-alive"><span class="sec-t">存活</span>${alive}</div>
+    </div>
+  </div></section>`;
+}
+
+function chipsFor(ctx) {
+  switch (ctx) {
+    case '第1夜': return ['第1夜狼人为什么分票？', '女巫首夜就用解药亏不亏？'];
+    case '第1天': return ['天1为什么票会集中过去？', '平票加赛时我该改票吗？'];
+    case '第2夜': return ['第2夜女巫这瓶毒用得对吗？', '狼人为什么选择刀猎人？'];
+    case '第2天': return ['猎人开枪选这个目标是最优吗？'];
+    default:      return ['我这局哪一步失误最大？', '狼队整体思路是什么？', '下一局我该怎么改进？'];
+  }
+}
+
+function renderQA() {
+  return `<section class="qa" id="qa">
+    <h3>幕后问答</h3>
+    <div class="qa-note">基于本局完整真相向 AI 追问 · 问答记录不会保存 · 单条问题上限 300 字</div>
+    <div class="qlog" id="qlog">
+      <div class="qmsg q">${S.qaPreset.q}</div>
+      <div class="qmsg a">${S.qaPreset.a}</div>
+    </div>
+    <div class="chips" id="qa-chips"></div>
+    <div class="qa-input">
+      <input id="qa-in" type="text" maxlength="300" placeholder="例如：天1我该弃票吗？（静态预览 · 回答为示例文案）" />
+      <button class="btn" id="qa-send">发送</button>
+    </div>
+  </section>
+  <div class="btnrow">
+    <button class="btn">🔄 开始新局</button>
+    <button class="btn ghost">⬇ 导出本局记录</button>
+    <span class="brnote">静态预览：按钮不触发真实逻辑（落地走 act(confirm_new_game) / onExportDebug）</span>
+  </div>`;
+}
+
+function renderNav() {
+  SECS = [{ id: 'prologue', label: '序幕' }];
+  S.rounds.forEach(r => SECS.push({
+    id: `round-${r.kind}-${r.n}`,
+    label: `${r.kind === 'night' ? '☾ 夜' : '☀ 天'}${r.n}`,
+    dots: r.dots || [],
+  }));
+  SECS.push({ id: 'finale', label: '终局' });
+  SECS.push({ id: 'qa', label: '问AI', qa: true });
+  const inner = document.getElementById('nav-inner');
+  inner.innerHTML = SECS.map((s, i) => {
+    const dots = (s.dots || []).map(d => `<i style="background:${seatColor(d.seat)}"></i>`).join('');
+    const tip = (s.dots || []).map(d => d.tip).join('；');
+    const conn = (i > 0 && !s.qa) ? '<span class="np-conn"></span>' : '';
+    return `${conn}<button class="np ${s.qa ? 'np-qa' : ''}" data-sec="${s.id}" ${tip ? `title="${tip}"` : ''}>
+      <span>${s.label}</span><span class="np-dots">${dots}</span></button>`;
+  }).join('');
+}
+
+function render(key) {
+  CUR = key; S = SCRIPTS[key]; P = S.players; qaCtx = null;
+  document.getElementById('page').innerHTML =
+    renderHero() + `<div class="flow">${S.rounds.map(roundCard).join('')}${renderFinale()}</div>` + renderQA();
+  renderNav();
+  renderChips();
+  curId = 'prologue';
+  setActive('prologue');
+  document.querySelectorAll('.sc-btn').forEach(b => b.classList.toggle('on', b.dataset.sc === key));
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+function renderChips() {
+  const box = document.getElementById('qa-chips');
+  const lbl = qaCtx ? `围绕${qaCtx}` : '试着问问';
+  box.innerHTML = `<span class="c-lbl">${lbl}：</span>` +
+    chipsFor(qaCtx).map(t => `<button class="chip">${t}</button>`).join('');
+}
+
+/* ===================== 交互 ===================== */
+function goTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
+}
+function setActive(id) {
+  curId = id;
+  const idx = SECS.findIndex(s => s.id === id);
+  let curPill = null;
+  document.querySelectorAll('.np').forEach(p => {
+    const i = SECS.findIndex(s => s.id === p.dataset.sec);
+    p.classList.toggle('cur', i === idx);
+    p.classList.toggle('seen', i < idx);
+    if (i === idx) curPill = p;
+  });
+  if (curPill) {
+    const nav = document.getElementById('navbar');
+    if (matchMedia('(min-width:1281px)').matches) {
+      /* 侧栏模式：竖向滚动让当前节点居中 */
+      const target = curPill.offsetTop - nav.clientHeight / 2 + curPill.clientHeight / 2;
+      nav.scrollTo({ top: target, behavior: RM ? 'auto' : 'smooth' });
+    } else {
+      /* 吸顶横条模式：横向滚动让当前节点居中 */
+      const target = curPill.offsetLeft - nav.clientWidth / 2 + curPill.clientWidth / 2;
+      nav.scrollTo({ left: target, behavior: RM ? 'auto' : 'smooth' });
+    }
+  }
+}
+
+/* scroll-spy：以视口 40% 高度线为准，取最后一个越线的区块。
+   短卡（平安夜）也稳定——不依赖 IntersectionObserver 阈值，无闪跳。 */
+let spyTick = false;
+function spy() {
+  spyTick = false;
+  const mid = window.scrollY + window.innerHeight * 0.4;
+  let cur = SECS[0] && SECS[0].id;
+  for (const s of SECS) {
+    const el = document.getElementById(s.id);
+    if (el && el.getBoundingClientRect().top + window.scrollY - 120 <= mid) cur = s.id;
+  }
+  if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+    cur = SECS[SECS.length - 1].id;
+  }
+  if (cur !== curId) setActive(cur);
+}
+window.addEventListener('scroll', () => { if (!spyTick) { spyTick = true; requestAnimationFrame(spy); } }, { passive: true });
+
+/* 事件委托：导航点跳 / 死亡缩略带点跳+金脉冲 / 问这一轮 / 提问 chip / demo 切换 */
+document.addEventListener('click', e => {
+  const np = e.target.closest('.np');
+  if (np) { goTo(np.dataset.sec); return; }
+  const sc = e.target.closest('.schip');
+  if (sc) {
+    const el = document.getElementById(sc.dataset.target);
+    if (el) {
+      el.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'center' });
+      el.classList.remove('pulse-hl'); void el.offsetWidth; el.classList.add('pulse-hl');
+      setTimeout(() => el.classList.remove('pulse-hl'), 1300);
+    }
+    return;
+  }
+  const ask = e.target.closest('.askbtn');
+  if (ask) {
+    qaCtx = ask.dataset.round; renderChips();
+    goTo('qa');
+    const input = document.getElementById('qa-in');
+    input.value = `关于${qaCtx}：`;
+    setTimeout(() => input.focus({ preventScroll: true }), RM ? 0 : 450);
+    return;
+  }
+  const chip = e.target.closest('.chip');
+  if (chip) {
+    const input = document.getElementById('qa-in');
+    input.value = chip.textContent; input.focus({ preventScroll: true });
+    return;
+  }
+  const scb = e.target.closest('.sc-btn');
+  if (scb) { render(scb.dataset.sc); return; }
+  if (e.target.closest('#qa-send')) sendQA();
+});
+
+function sendQA() {
+  const input = document.getElementById('qa-in');
+  const v = input.value.trim();
+  if (!v) return;
+  const log = document.getElementById('qlog');
+  log.insertAdjacentHTML('beforeend', `<div class="qmsg q"></div>`);
+  log.lastElementChild.textContent = v;
+  input.value = '';
+  const pendPill = document.querySelector('.np-qa');
+  if (pendPill) pendPill.classList.add('pending');
+  log.insertAdjacentHTML('beforeend',
+    `<div class="qmsg a" id="qa-pending"><span class="typing"><i class="dot"></i><i class="dot"></i><i class="dot"></i></span></div>`);
+  log.querySelectorAll('#qa-pending .typing .dot').forEach(d => d.classList.add('dot'));
+  setTimeout(() => {
+    const p = document.getElementById('qa-pending');
+    if (p) { p.removeAttribute('id'); p.textContent = '（静态预览示例回答）正式版中，这里会把整份 ReviewContext 连同你的问题发给 AI，由它基于完整真相作答。'; }
+    if (pendPill) pendPill.classList.remove('pending');
+  }, RM ? 0 : 900);
+}
+
+/* 键盘：←/→ 上一/下一区块，Home 序幕 / End 终局 */
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea')) return;
+  const ids = SECS.map(s => s.id);
+  const i = ids.indexOf(curId);
+  if (e.key === 'ArrowRight') { e.preventDefault(); goTo(ids[Math.min(i + 1, ids.length - 1)]); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(ids[Math.max(i - 1, 0)]); }
+  else if (e.key === 'Home') { e.preventDefault(); goTo('prologue'); }
+  else if (e.key === 'End') { e.preventDefault(); goTo('finale'); }
+});
+
+render('good');
+</script>
+</body>
+</html>
