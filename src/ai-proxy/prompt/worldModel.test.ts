@@ -39,6 +39,15 @@ describe("L2 世界模型 worldModel()", () => {
     expect(text).toContain("解药已耗");
   });
 
+  it("笃定推理不是狼证 + 对跳先后不代表真假（治「说太死被冤推」与首跳锚定）", () => {
+    const text = worldModel();
+    // 把公开信息串成明确结论、说得笃定，不构成嫌疑。
+    expect(text).toContain("不是狼证");
+    expect(text).toContain("公开信息推不出来的事");
+    // 对跳时先跳后跳不构成真假依据（真神常被抢跳、只能后跳反驳）。
+    expect(text).toContain("跳的先后不代表真假");
+  });
+
   it("不出现身份断言子串", () => {
     expect(worldModel()).not.toMatch(/狼人是|预言家是/);
   });

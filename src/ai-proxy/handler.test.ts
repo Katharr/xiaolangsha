@@ -296,6 +296,89 @@ describe("buildPrompt (ISO-001: 只含可见信息)", () => {
     expect(prompt.system).toContain("别按座位顺序");
   });
 
+  it("speech 顺位：首位开场 / 中间位信息配额 / 末位归票", () => {
+    // 构造「aliveCount 人存活、当日已有 spokenCount 条 day_speech」的 vi。
+    const speechVi = (spokenCount: number, aliveCount: number, extraSpeeches: VisibleInformationSnapshot["speeches"] = []) =>
+      fakeVi({
+        gamePhase: "day_speech",
+        round: { night: 2, day: 2, voteRound: "first" },
+        alivePlayers: Array.from({ length: aliveCount }, (_, i) => ({
+          playerId: `ai-${i + 1}`,
+          name: `玩家${i + 1}`,
+          seat: i + 1,
+          alive: true,
+        })),
+        speeches: [
+          ...Array.from({ length: spokenCount }, (_, i) => ({
+            eventId: `ev-${i + 1}`,
+            speakerId: `ai-${i + 1}`,
+            speakerSeat: i + 1,
+            speakerName: `玩家${i + 1}`,
+            day: 2,
+            speechKind: "day_speech" as const,
+            text: `第${i + 1}个发言`,
+            createdAt: "2026-07-16T00:00:00.000Z",
+          })),
+          ...extraSpeeches,
+        ],
+      });
+    const speechPrompt = (vi: VisibleInformationSnapshot) =>
+      buildPrompt({ gameId: "g-1", taskType: "speech", playerId: "ai-1", visibleInformation: vi }).system;
+
+    // 首位：开场职责，不背归票。
+    const first = speechPrompt(speechVi(0, 3));
+    expect(first).toContain("第一个开口");
+    expect(first).not.toContain("归票是你的活");
+
+    // 中间位：信息量配额。
+    const middle = speechPrompt(speechVi(1, 3));
+    expect(middle).toContain("实在内容");
+    expect(middle).not.toContain("第一个开口");
+    expect(middle).not.toContain("归票是你的活");
+
+    // 末位：归票职责。
+    const last = speechPrompt(speechVi(2, 3));
+    expect(last).toContain("最后一个发言");
+    expect(last).toContain("归票是你的活");
+
+    // 边角：往日发言 / 当日遗言不污染计数——混入后仍判末位。
+    const noisy = speechPrompt(
+      speechVi(2, 3, [
+        {
+          eventId: "ev-old",
+          speakerId: "ai-9",
+          speakerSeat: 9,
+          speakerName: "往日发言",
+          day: 1,
+          speechKind: "day_speech",
+          text: "昨天的发言",
+          createdAt: "2026-07-15T00:00:00.000Z",
+        },
+        {
+          eventId: "ev-lw",
+          speakerId: "ai-8",
+          speakerSeat: 8,
+          speakerName: "遗言者",
+          day: 2,
+          speechKind: "last_words",
+          text: "遗言",
+          createdAt: "2026-07-16T00:00:00.000Z",
+        },
+      ]),
+    );
+    expect(noisy).toContain("归票是你的活");
+
+    // 新文案仍守身份断言红线。
+    expect(first + middle + last).not.toMatch(/狼人是|预言家是/);
+  });
+
+  it("vote 指令：带理由的归票号召算新信息，允许并票", () => {
+    const prompt = buildPrompt(voteRequest());
+    expect(prompt.system).toContain("把票并过去");
+    // 治「说太死被冤推」：发言风格不是投人理由。
+    expect(prompt.system).toContain("风格不是狼证");
+  });
+
   it("gives the same persona for the same name across calls (stable)", () => {
     const a = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));
     const b = buildPrompt(voteRequest(fakeVi({ ownName: "囡囡" })));

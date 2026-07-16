@@ -10,6 +10,7 @@ import type {
 } from "../shared";
 
 import { NIGHT_STEP_LABEL, ROLE_LABEL } from "./labels";
+import { SpeechCoachCard } from "./SpeechCoachCard";
 
 /** 女巫从自己的私有 witch_wake 事件里读出今晚被刀者与解药/毒药剩余。 */
 type WitchWake = {
@@ -463,11 +464,16 @@ export function ActionArea({
 
     case "day_speech":
       return wrap(
-        <p className="action-hint">
-          {vi?.canAct
-            ? "轮到你发言，请在下方输入。"
-            : "等待其他玩家发言…"}
-        </p>,
+        <>
+          <p className="action-hint">
+            {vi?.canAct
+              ? "轮到你发言，请在下方输入。"
+              : "等待其他玩家发言…"}
+          </p>
+          {vi?.canAct ? (
+            <SpeechCoachCard role={vi.ownRole} day={vi.round.day} />
+          ) : null}
+        </>,
       );
 
     case "tie_speech":

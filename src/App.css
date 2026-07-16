@@ -597,6 +597,51 @@
   color: var(--ink-dim);
 }
 
+/* 新手发言提示卡（day_speech 轮到人类时） */
+.speech-coach {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(216, 178, 90, 0.06);
+}
+
+.speech-coach-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.speech-coach-toggle:hover:not(:disabled) {
+  filter: none;
+  color: var(--ink);
+}
+
+.speech-coach-caret {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.speech-coach-tips {
+  margin: 0;
+  padding: 0 10px 8px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;
