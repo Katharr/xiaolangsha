@@ -23,8 +23,9 @@ export function buildReviewContext(
   players: Player[],
   events: TruthEvent[],
 ): ReviewContext {
-  const speeches = events.flatMap(toReviewSpeech);
-  const votes = events.flatMap(toReviewVote);
+  const playersById = new Map(players.map((player) => [player.playerId, player]));
+  const speeches = events.flatMap((event) => toReviewSpeech(event, playersById));
+  const votes = events.flatMap((event) => toReviewVote(event, playersById));
   const nightActions = events.flatMap(toReviewNightAction);
   const outcomes = derivePlayerOutcomes(players, events);
   const outcome = resolveOutcome(events, players);
@@ -42,7 +43,12 @@ export function buildReviewContext(
   };
 }
 
-function toReviewSpeech(event: TruthEvent): ReviewSpeechRef[] {
+// 与 visibility.ts 的 toVisibleSpeech/toVisibleVote 同理：playerId 后缀与座位号解耦，
+// 发言/投票条目必须自带座位号，复盘问答的 AI 才不会把 id 后缀当「N号」。
+function toReviewSpeech(
+  event: TruthEvent,
+  playersById: Map<string, Player>,
+): ReviewSpeechRef[] {
   if (
     event.type !== "speech_submitted" &&
     event.type !== "tie_speech_submitted" &&
@@ -51,10 +57,15 @@ function toReviewSpeech(event: TruthEvent): ReviewSpeechRef[] {
     return [];
   }
 
+  const speakerId = String(event.payload.speakerId);
+  const speaker = playersById.get(speakerId);
+
   return [
     {
       eventId: event.eventId,
-      speakerId: String(event.payload.speakerId),
+      speakerId,
+      speakerSeat: speaker?.seat ?? 0,
+      speakerName: speaker?.name ?? speakerId,
       day: Number(event.payload.day),
       speechKind:
         event.type === "last_words_submitted"
@@ -68,24 +79,32 @@ function toReviewSpeech(event: TruthEvent): ReviewSpeechRef[] {
   ];
 }
 
-function toReviewVote(event: TruthEvent): ReviewVoteRef[] {
+function toReviewVote(
+  event: TruthEvent,
+  playersById: Map<string, Player>,
+): ReviewVoteRef[] {
   if (event.type !== "vote_submitted") {
     return [];
   }
 
   const choiceType: VoteChoiceType =
     event.payload.choiceType === "abstain" ? "abstain" : "target";
+  const voterId = String(event.payload.voterId);
+  const targetId =
+    typeof event.payload.targetId === "string" ? event.payload.targetId : undefined;
+  const voterSeat = playersById.get(voterId)?.seat;
+  const targetSeat = targetId ? playersById.get(targetId)?.seat : undefined;
 
   return [
     {
       eventId: event.eventId,
       day: event.round.day,
       voteRound: event.round.voteRound === "tie_break" ? "tie_break" : "first",
-      voterId: String(event.payload.voterId),
+      voterId,
+      ...(voterSeat ? { voterSeat } : {}),
       choiceType,
-      ...(typeof event.payload.targetId === "string"
-        ? { targetId: event.payload.targetId }
-        : {}),
+      ...(targetId ? { targetId } : {}),
+      ...(targetSeat ? { targetSeat } : {}),
     },
   ];
 }

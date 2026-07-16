@@ -28,6 +28,10 @@ export function buildVisibleInformation(
     throw new Error("Viewer is not part of this game.");
   }
 
+  const playersById = new Map(
+    snapshot.players.map((player) => [player.playerId, player]),
+  );
+
   return {
     gameId: snapshot.gameId,
     viewerId,
@@ -61,8 +65,8 @@ export function buildVisibleInformation(
     privateEvents: events
       .filter((event) => event.visibility.visibleTo.includes(viewerId))
       .map(toVisibleEventRef),
-    speeches: events.flatMap(toVisibleSpeech),
-    votes: collectVisibleVotes(events, viewerId),
+    speeches: events.flatMap((event) => toVisibleSpeech(event, playersById)),
+    votes: collectVisibleVotes(events, viewerId, playersById),
     legalActions: getLegalActions(viewer, snapshot),
     canAct: canViewerAct(viewer, snapshot),
     nightStatus: buildNightStatus(viewer, snapshot),
@@ -171,7 +175,12 @@ function toVisibleEventRef(event: TruthEvent): VisibleEventRef {
   };
 }
 
-function toVisibleSpeech(event: TruthEvent): VisibleSpeech[] {
+// 发言/投票条目必须带座位号：playerId（ai-N）的数字后缀与座位号解耦（座位开局被
+// seededShuffle 打乱），只给 playerId 会诱导 AI 把 id 后缀当「N号」念，张冠李戴。
+function toVisibleSpeech(
+  event: TruthEvent,
+  playersById: Map<string, Player>,
+): VisibleSpeech[] {
   if (
     event.type !== "speech_submitted" &&
     event.type !== "tie_speech_submitted" &&
@@ -180,10 +189,15 @@ function toVisibleSpeech(event: TruthEvent): VisibleSpeech[] {
     return [];
   }
 
+  const speakerId = String(event.payload.speakerId);
+  const speaker = playersById.get(speakerId);
+
   return [
     {
       eventId: event.eventId,
-      speakerId: String(event.payload.speakerId),
+      speakerId,
+      speakerSeat: speaker?.seat ?? 0,
+      speakerName: speaker?.name ?? speakerId,
       day: Number(event.payload.day),
       speechKind:
         event.type === "last_words_submitted"
@@ -197,16 +211,24 @@ function toVisibleSpeech(event: TruthEvent): VisibleSpeech[] {
   ];
 }
 
-function toVisibleVote(event: TruthEvent): VisibleVote {
+function toVisibleVote(
+  event: TruthEvent,
+  playersById: Map<string, Player>,
+): VisibleVote {
+  const voterId = String(event.payload.voterId);
+  const targetId =
+    typeof event.payload.targetId === "string" ? event.payload.targetId : undefined;
+  const voterSeat = playersById.get(voterId)?.seat;
+  const targetSeat = targetId ? playersById.get(targetId)?.seat : undefined;
   return {
     eventId: event.eventId,
     day: event.round.day,
     voteRound: event.round.voteRound === "tie_break" ? "tie_break" : "first",
-    voterId: String(event.payload.voterId),
+    voterId,
+    ...(voterSeat ? { voterSeat } : {}),
     choiceType: event.payload.choiceType === "abstain" ? "abstain" : "target",
-    ...(typeof event.payload.targetId === "string"
-      ? { targetId: event.payload.targetId }
-      : {}),
+    ...(targetId ? { targetId } : {}),
+    ...(targetSeat ? { targetSeat } : {}),
   };
 }
 
@@ -217,6 +239,7 @@ function toVisibleVote(event: TruthEvent): VisibleVote {
 function collectVisibleVotes(
   events: TruthEvent[],
   viewerId: string,
+  playersById: Map<string, Player>,
 ): VisibleVote[] {
   const resolvedRounds = new Set<string>();
   for (const event of events) {
@@ -237,7 +260,7 @@ function collectVisibleVotes(
     if (voterId !== viewerId && !revealed) {
       continue;
     }
-    votes.push(toVisibleVote(event));
+    votes.push(toVisibleVote(event, playersById));
   }
   return votes;
 }

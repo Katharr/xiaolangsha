@@ -476,6 +476,46 @@ describe("P9-S05 day announcement and ordered day speech rules", () => {
     );
   });
 
+  it("ISO-004 visible speeches carry the speaker's real seat and name (playerId suffix is not the seat)", () => {
+    const announcementState = createDayAnnouncementState();
+    const announced = expectOk(
+      confirmDayAnnouncement(
+        announcementState,
+        "confirm-day-announcement-speech-seat",
+      ),
+    );
+    const state = appendState(announcementState, announced);
+    const speakerId = announced.snapshot.speechState?.currentSpeakerId ?? "";
+    const submitted = expectOk(
+      submitSpeech(state, {
+        type: "submit_speech",
+        idempotencyKey: "speech-seat-attribution",
+        speakerId,
+        text: "seat attribution check",
+      }),
+    );
+    const afterSpeech = appendState(state, submitted);
+
+    const speaker = afterSpeech.snapshot.players.find(
+      (player) => player.playerId === speakerId,
+    );
+    expect(speaker).toBeDefined();
+
+    const view = buildVisibleInformation(
+      humanPlayerId,
+      afterSpeech.snapshot,
+      afterSpeech.events,
+    );
+    const entry = view.speeches.find(
+      (speech) => speech.eventId === submitted.events[0]?.eventId,
+    );
+    expect(entry).toMatchObject({
+      speakerId,
+      speakerSeat: speaker?.seat,
+      speakerName: speaker?.name,
+    });
+  });
+
   it("RULE-008 replays day confirmation and speech idempotency keys as no-op results", () => {
     const state = createDayAnnouncementState();
     const confirmed = expectOk(

@@ -248,6 +248,8 @@ export const visibleEventRefSchema = z.object({
 export const visibleSpeechSchema = z.object({
   eventId: nonEmptyString,
   speakerId: nonEmptyString,
+  speakerSeat: z.number().int().positive(),
+  speakerName: nonEmptyString,
   day: z.number().int().nonnegative(),
   speechKind: speechKindSchema,
   text: z.string(),
@@ -259,8 +261,10 @@ export const visibleVoteSchema = z.object({
   day: z.number().int().nonnegative(),
   voteRound: activeVoteRoundSchema,
   voterId: z.string().optional(),
+  voterSeat: z.number().int().positive().optional(),
   choiceType: voteChoiceTypeSchema.optional(),
   targetId: z.string().optional(),
+  targetSeat: z.number().int().positive().optional(),
   tally: z.record(z.string(), z.unknown()).optional(),
 });
 

@@ -194,6 +194,9 @@ describe("buildDebugSummary", () => {
     // 预言家查验结果（狼1 → 狼人）。
     expect(summary).toContain("查验");
     expect(summary).toContain("→ 狼人");
+    // 非终局的 win_checked（夜晚结算后必发）不入时间线，不再出现「胜负判定：未知获胜」。
+    expect(summary).not.toContain("未知获胜");
+    expect(summary).not.toContain("胜负判定");
     // 正常诊断不带 ⚠️。
     expect(summary).not.toContain("⚠️");
   });

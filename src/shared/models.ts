@@ -226,6 +226,9 @@ export type VisibleEventRef = {
 export type VisibleSpeech = {
   eventId: string;
   speakerId: string;
+  /** 说话人座位号。playerId 的数字后缀与座位无关（座位开局被打乱），称呼「N号」必须以此为准。 */
+  speakerSeat: number;
+  speakerName: string;
   day: number;
   speechKind: SpeechKind;
   text: string;
@@ -237,8 +240,11 @@ export type VisibleVote = {
   day: number;
   voteRound: ActiveVoteRound;
   voterId?: string;
+  /** 投票人/目标座位号，同 VisibleSpeech.speakerSeat：playerId 后缀 ≠ 座位号。 */
+  voterSeat?: number;
   choiceType?: VoteChoiceType;
   targetId?: string;
+  targetSeat?: number;
   tally?: Record<string, unknown>;
 };
 
@@ -301,6 +307,9 @@ export type NightProgress = {
 export type ReviewSpeechRef = {
   eventId: string;
   speakerId: string;
+  /** 同 VisibleSpeech.speakerSeat：playerId 后缀 ≠ 座位号，复盘问答的 AI 也要直接拿到座位。 */
+  speakerSeat: number;
+  speakerName: string;
   day: number;
   speechKind: SpeechKind;
   text: string;
@@ -312,8 +321,10 @@ export type ReviewVoteRef = {
   day: number;
   voteRound: ActiveVoteRound;
   voterId: string;
+  voterSeat?: number;
   choiceType: VoteChoiceType;
   targetId?: string;
+  targetSeat?: number;
 };
 
 export type ReviewNightActionRef = {

@@ -289,6 +289,16 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     // 防跟票：本轮未结算时，其他投票者看不到这张票；投票者只看得到自己的票。
     expect(aiVoterAfter.votes).toEqual([]);
     expect(humanAfter.votes.map((vote) => vote.voterId)).toEqual([humanPlayerId]);
+
+    // 票面同时带真实座位号（playerId 后缀与座位号无关，AI/UI 不做隐式查表）。
+    const findSeat = (id: string) =>
+      afterFirst.snapshot.players.find((player) => player.playerId === id)?.seat;
+    expect(humanAfter.votes[0]).toMatchObject({
+      voterId: humanPlayerId,
+      voterSeat: findSeat(humanPlayerId),
+      targetId: "ai-1",
+      targetSeat: findSeat("ai-1"),
+    });
   });
 
   it("resolves a unique majority into exile, last words, and the next night", () => {

@@ -47,11 +47,17 @@ export function shuffledTargets(
 }
 
 export function task(taskType: InGameTaskType, vi: VisibleInformationSnapshot): string {
+  // 目标 id 必须同时标注座位号+名字：playerId 的数字后缀和座位号无关，只列 id 会让模型
+  // 「想投5号」却填错人。
+  const targetLabel = (id: string): string => {
+    const player = vi.alivePlayers.find((p) => p.playerId === id);
+    return player ? `${id}=${player.seat}号·${player.name}` : id;
+  };
   const legalTargets = vi.legalActions.flatMap((action) => action.legalTargets);
   const orderedTargets = legalTargets.length > 0 ? shuffledTargets(legalTargets, vi) : [];
   const targetsHint =
     orderedTargets.length > 0
-      ? `合法目标 id：${orderedTargets.join("、")}。（顺序随机排的，不代表任何倾向，别按排序先后选人。）`
+      ? `合法目标（targetId 填等号左边的 id）：${orderedTargets.map(targetLabel).join("、")}。（顺序随机排的，不代表任何倾向，别按排序先后选人。）`
       : "当前没有可选目标。";
 
   switch (taskType) {
@@ -76,12 +82,26 @@ export function task(taskType: InGameTaskType, vi: VisibleInformationSnapshot): 
       ].join("\n");
     case "hunter_shoot":
       return `你是猎人且已出局，可开枪带走一名存活玩家：想清楚带走谁最有利，给 targetId 开枪，或留空放弃。${targetsHint}`;
-    case "vote":
+    case "vote": {
+      // 把自己本轮发言原文直接拎出来回显：靠模型自己去 vi.speeches 大数组里捞太不可靠，
+      // 是「嘴上怀疑7号、票投5号」言行不一的机械成因。
+      const ownSpeech = vi.speeches
+        .filter(
+          (s) =>
+            s.speakerId === vi.viewerId &&
+            s.day === vi.round.day &&
+            (s.speechKind === "day_speech" || s.speechKind === "tie_speech"),
+        )
+        .at(-1);
+      const consistencyLine = ownSpeech
+        ? `你这一轮发言的原文：「${ownSpeech.text}」——你在里面点名怀疑谁，票就投谁；除非发言之后出了新信息让你改判，否则别临时改投别人——尤其别投你刚说过要相信、要保护、或是好人的人，那样言行不一。`
+        : "先回看你自己这一轮的发言点名怀疑的是谁，就把票投给那个人；除非这一轮出了新信息让你改判，否则别临时改投别人——尤其别投你刚说过要相信、要保护、或是好人的人，那样言行不一。";
       return [
         "投票放逐：暗投，你看不到别人投了谁，就按自己的判断投最该走的那个、别挑场上最软的柿子。",
-        "先回看你自己这一轮的发言点名怀疑的是谁，就把票投给那个人；除非这一轮出了新信息让你改判，否则别临时改投别人——尤其别投你刚说过要相信、要保护、或是好人的人，那样言行不一。",
+        consistencyLine,
         `choiceType="target" 配 targetId 投一票，或允许时 choiceType="abstain" 弃票；不能投自己。${targetsHint}`,
       ].join("\n");
+    }
     case "speech":
       return [
         "轮到你发言（只填 text）：就像在微信群里接着聊——挑这一轮你最在意的那一点说就行，可以回应某个人、附和、抬杠、吐个槽，或者只甩一句自己的态度；不用面面俱到、不用每个人都回应，也不用每次都先报「我回应谁」。",

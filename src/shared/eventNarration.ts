@@ -100,12 +100,11 @@ export function narrateEvent(event: TruthEvent): NarrationSegment[] | null {
     case "game_ended": {
       const winner = p.winner;
       const reason = p.winReason;
-      const winnerText =
-        winner === "werewolf_team"
-          ? "狼人阵营"
-          : winner === "good_team"
-            ? "好人阵营"
-            : "未知";
+      // 非终局的 win_checked 不带 winner（引擎每轮结算后的内部记账），不入时间线。
+      if (winner !== "werewolf_team" && winner !== "good_team") {
+        return null;
+      }
+      const winnerText = winner === "werewolf_team" ? "狼人阵营" : "好人阵营";
       const reasonText =
         typeof reason === "string" && reason in WIN_REASON_LABEL
           ? WIN_REASON_LABEL[reason as keyof typeof WIN_REASON_LABEL]
