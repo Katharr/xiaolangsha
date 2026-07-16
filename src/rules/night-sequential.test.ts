@@ -341,7 +341,7 @@ describe("顺序夜晚 + 女巫 + 屠边", () => {
     // 真相层（snapshot/TruthEvent）保留 poison，复盘可经 reviewContext 揭示（ISO-002）。
   });
 
-  it("女巫首夜不能自救", () => {
+  it("女巫首夜可以自救（主流规则）", () => {
     let state = reachFirstNight();
     const [wolf1, wolf2] = idsByRole(state.snapshot, "werewolf");
     const seer = idsByRole(state.snapshot, "seer")[0];
@@ -369,11 +369,45 @@ describe("顺序夜晚 + 女巫 + 屠边", () => {
       actionType: "seer_check",
       targetId: wolf1,
     });
-    // 女巫想自救 → 拒绝（首夜禁止）。
+    // 女巫首夜自救 → 允许，结算后平安夜、女巫存活。
+    state = step(state, {
+      type: "submit_witch_action",
+      idempotencyKey: key("self-save"),
+      actorId: witch,
+      witchChoice: "save",
+    });
+    expect(
+      state.snapshot.players.find((p) => p.playerId === witch)?.alive,
+    ).toBe(true);
+    expect(state.snapshot.players.every((p) => p.alive)).toBe(true);
+  });
+
+  it("女巫非首夜不能自救（主流规则）", () => {
+    const base = reachFirstNight();
+    const witch = idsByRole(base.snapshot, "witch")[0];
+    // 构造「第 2 夜女巫步骤、刀口是女巫自己」的相位。
+    const crafted: EngineState = {
+      ...base,
+      snapshot: {
+        ...base.snapshot,
+        round: { night: 2, day: 1, voteRound: "none" },
+        nightState: {
+          night: 2,
+          steps: [
+            { kind: "witch_action", actorIds: [witch], submittedActorIds: [] },
+          ],
+          currentStepIndex: 0,
+          resolved: false,
+          deathPlayerIds: [],
+          wolfKillTargetId: witch,
+        },
+        pendingAction: null,
+      },
+    };
     expectErr(
-      apply(state, {
+      apply(crafted, {
         type: "submit_witch_action",
-        idempotencyKey: key("self-save"),
+        idempotencyKey: key("self-save-n2"),
         actorId: witch,
         witchChoice: "save",
       }),

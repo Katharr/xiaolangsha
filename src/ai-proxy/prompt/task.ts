@@ -76,7 +76,7 @@ export function task(taskType: InGameTaskType, vi: VisibleInformationSnapshot): 
     }
     case "witch_action":
       return [
-        "女巫行动：你已得知今晚被刀的人。决定 witchChoice——save 救他 / poison 配 targetId 毒一人 / skip 放弃；解药、毒药各只一次。",
+        "女巫行动：你已得知今晚被刀的人。决定 witchChoice——save 救他 / poison 配 targetId 毒一人 / skip 放弃；解药、毒药各只一次。被刀的是你自己时仅首夜可自救（首夜被刀基本该自救保神牌），非首夜自救无效。",
         "用毒要有指向某个具体人的依据（发言破绽、票型、对跳、公开查杀）；说不出具体理由就 skip 把毒留着，别盲毒、也别因为「得做点什么」乱毒；已被坐实的狼就果断毒。",
         targetsHint,
       ].join("\n");

@@ -260,10 +260,10 @@ export function ActionArea({
       if (action.actionType === "witch_action") {
         const wake = readWitchWake(vi);
         const killed = wake?.killedTargetId ?? null;
-        // 首夜自救受板规限制：被刀者是自己且为首夜时不提供解药（与规则层一致）。
-        const selfSaveFirstNight =
-          killed !== null && killed === vi.viewerId && vi.round.night === 1;
-        const canSave = Boolean(killed) && wake?.saveAvailable === true && !selfSaveFirstNight;
+        // 主流自救规则：仅首夜可自救——非首夜被刀者是自己时不提供解药（与规则层一致）。
+        const selfSaveBlocked =
+          killed !== null && killed === vi.viewerId && vi.round.night !== 1;
+        const canSave = Boolean(killed) && wake?.saveAvailable === true && !selfSaveBlocked;
         const canPoison = wake?.poisonAvailable === true;
 
         const submitWitch = () => {

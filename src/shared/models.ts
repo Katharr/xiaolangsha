@@ -47,7 +47,7 @@ export type BoardConfig = {
   allowAbstainVote: boolean;
   allowSelfVote: boolean;
   maxTieRounds: number;
-  /** 女巫是否可在首夜对自己用解药（默认 false）。 */
+  /** 女巫是否可在首夜自救（主流规则 true；非首夜自救一律禁止，与此开关无关）。 */
   witchCanSelfSaveFirstNight?: boolean;
   /** 守卫是否禁止连续两夜守同一人（默认 true，本期未上守卫可忽略）。 */
   guardCannotRepeat?: boolean;

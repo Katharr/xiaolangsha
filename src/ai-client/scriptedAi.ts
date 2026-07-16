@@ -71,7 +71,7 @@ function decideNightAction(
 
 /**
  * 女巫兜底：默认 skip（永远合法，绝不卡死 driver）。仅当今晚有人倒牌、且本局
- * 尚未用过解药（从自己的私有事件可推断）、又不构成首夜自救时，才用解药救人。
+ * 尚未用过解药（从自己的私有事件可推断）、又不构成非首夜自救时，才用解药救人。
  */
 function decideWitchAction(vi: VisibleInformationSnapshot): AiTaskPayload {
   const killedTargetId = findWitchKillTarget(vi);
@@ -80,10 +80,11 @@ function decideWitchAction(vi: VisibleInformationSnapshot): AiTaskPayload {
       event.type === "night_action_submitted" &&
       event.payload.witchChoice === "save",
   );
-  const firstNightSelfSave =
-    killedTargetId === vi.viewerId && vi.round.night === 1;
+  // 主流规则：自救仅限首夜，非首夜被刀是自己时解药非法。
+  const selfSaveBlocked =
+    killedTargetId === vi.viewerId && vi.round.night !== 1;
 
-  if (killedTargetId && !alreadySaved && !firstNightSelfSave) {
+  if (killedTargetId && !alreadySaved && !selfSaveBlocked) {
     return { witchChoice: "save" };
   }
   return { witchChoice: "skip" };

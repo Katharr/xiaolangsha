@@ -411,7 +411,7 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     expect(lastWords.snapshot.voteState).toBeUndefined();
   });
 
-  it("ends the game when the exiled player removes the last werewolf", () => {
+  it("ends the game immediately when the exile removes the last werewolf (no last words)", () => {
     let state = reachFirstVote();
 
     state = appendState(state, expectOk(castVote(state, "human-1", "first", "target", "ai-1")));
@@ -419,37 +419,39 @@ describe("P9-S06 voting, tie-break, exile and last words", () => {
     state = appendState(state, expectOk(castVote(state, "ai-4", "first", "target", "ai-1")));
     const resolved = expectOk(castVote(state, "ai-1", "first", "target", "human-1"));
 
-    expect(resolved.snapshot.gamePhase).toBe("exile_last_words");
-    state = appendState(state, resolved);
-
-    const lastWords = expectOk(
-      apply(state, {
-        type: "submit_last_words",
-        idempotencyKey: "vote-last-words-wolf",
-        speakerId: "ai-1",
-        text: "You found me.",
-      }),
-    );
-
-    expect(lastWords.events.map((event) => event.type)).toEqual([
-      "last_words_submitted",
+    // 放逐即达成屠边 → 跳过遗言，事件链一步走到终局。
+    expect(resolved.events.map((event) => event.type)).toEqual([
+      "vote_submitted",
+      "vote_resolved",
+      "exile_resolved",
+      "player_died",
       "win_checked",
       "phase_changed",
       "game_ended",
     ]);
-    expect(lastWords.snapshot.gamePhase).toBe("review");
-    expect(lastWords.snapshot.winner).toBe("good_team");
-    expect(lastWords.snapshot.winReason).toBe("all_werewolves_dead");
-    expect(lastWords.snapshot.pendingAction).toBeNull();
-    expect(lastWords.session.status).toBe("ended");
-    expect(lastWords.session.endedAt).toBe(now);
+    expect(resolved.snapshot.gamePhase).toBe("review");
+    expect(resolved.snapshot.winner).toBe("good_team");
+    expect(resolved.snapshot.winReason).toBe("all_werewolves_dead");
+    expect(resolved.snapshot.pendingAction).toBeNull();
+    expect(resolved.session.status).toBe("ended");
+    expect(resolved.session.endedAt).toBe(now);
 
-    const gameEnded = lastWords.events.find((event) => event.type === "game_ended");
+    const gameEnded = resolved.events.find((event) => event.type === "game_ended");
     expect(gameEnded?.payload).toEqual({
       winner: "good_team",
       winReason: "all_werewolves_dead",
       endedAt: now,
     });
+
+    // 被放逐的狼没有遗言可说。
+    state = appendState(state, resolved);
+    const denied = apply(state, {
+      type: "submit_last_words",
+      idempotencyKey: "vote-last-words-wolf",
+      speakerId: "ai-1",
+      text: "You found me.",
+    });
+    expect(denied.ok).toBe(false);
   });
 
   it("routes a first-round tie through tie speeches into a tie-break vote", () => {

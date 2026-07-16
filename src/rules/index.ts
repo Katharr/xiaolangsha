@@ -543,12 +543,12 @@ function submitWitchAction(
     if (!witchState.saveAvailable || !killed) {
       return rulesError("ACTION_NOT_ALLOWED", "Witch cannot use the antidote now.");
     }
+    // 主流规则：自救仅限首夜（板规 witchCanSelfSaveFirstNight 开启时）；非首夜一律不可自救。
     if (
       killed === action.actorId &&
-      snapshot.round.night === 1 &&
-      !board?.witchCanSelfSaveFirstNight
+      (snapshot.round.night !== 1 || !board?.witchCanSelfSaveFirstNight)
     ) {
-      return rulesError("ACTION_NOT_ALLOWED", "Witch cannot self-save on the first night.");
+      return rulesError("ACTION_NOT_ALLOWED", "Witch can only self-save on the first night.");
     }
     working = { ...working, witchSavedTargetId: killed };
     newWitchState = { ...witchState, saveAvailable: false };
@@ -1773,6 +1773,27 @@ function resolveVote(params: {
           }
         : player,
     );
+
+    // 放逐一旦达成胜负（如放逐最后一狼），立即终局进复盘——跳过遗言与猎人开枪。
+    const board = getBoardConfig(session.boardId);
+    const winMode: WinConditionMode = board?.winConditionMode ?? "simple_count";
+    if (checkWin(players, winMode)) {
+      return finishDayResolution({
+        context: params.context,
+        previousEvents: params.previousEvents,
+        priorEvents: events,
+        nextSeq,
+        players,
+        fromPhase: votePhase,
+        viewerId: params.action.voterId,
+        baseSnapshot: {
+          ...snapshot,
+          players,
+          voteState: { ...voteState, resolved: true },
+        },
+        idempotencyKey: params.action.idempotencyKey,
+      });
+    }
 
     events.push(
       buildEvent({

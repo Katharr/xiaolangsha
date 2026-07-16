@@ -33,7 +33,7 @@ export const standard7pBoard: BoardConfig = {
   allowAbstainVote: true,
   allowSelfVote: false,
   maxTieRounds: 1,
-  witchCanSelfSaveFirstNight: false,
+  witchCanSelfSaveFirstNight: true,
   guardCannotRepeat: true,
 };
 

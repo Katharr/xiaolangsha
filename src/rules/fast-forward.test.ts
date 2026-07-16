@@ -199,26 +199,13 @@ function reachFirstVote(): EngineState {
   return state;
 }
 
-/** Reaches review by exiling the lone werewolf (good team wins). */
+/** Reaches review by exiling the lone werewolf（放逐末狼即终局，跳过遗言）。 */
 function reachReview(): EngineState {
   let state = reachFirstVote();
   state = appendState(state, expectOk(castVote(state, "human-1", "first", "target", "ai-1")));
   state = appendState(state, expectOk(castVote(state, "ai-2", "first", "target", "ai-1")));
   state = appendState(state, expectOk(castVote(state, "ai-4", "first", "target", "ai-1")));
   state = appendState(state, expectOk(castVote(state, "ai-1", "first", "target", "human-1")));
-
-  expect(state.snapshot.gamePhase).toBe("exile_last_words");
-  state = appendState(
-    state,
-    expectOk(
-      apply(state, {
-        type: "submit_last_words",
-        idempotencyKey: "ff-wolf-last-words",
-        speakerId: "ai-1",
-        text: "Well played.",
-      }),
-    ),
-  );
 
   expect(state.snapshot.gamePhase).toBe("review");
   return state;
@@ -396,7 +383,7 @@ describe("P9-S11 dead-spectator auto-advance, new game and review context", () =
     expect(wolfKill?.actorIds?.length ?? 0).toBeGreaterThan(0);
     expect(wolfKill?.actorIds?.every((id) => wolfIds.includes(id))).toBe(true);
 
-    // Four day speeches plus the werewolf's last words.
+    // Four day speeches; 终局放逐直接结束，末狼没有遗言。
     const daySpeeches = context.speeches.filter(
       (speech) => speech.speechKind === "day_speech",
     );
@@ -404,8 +391,7 @@ describe("P9-S11 dead-spectator auto-advance, new game and review context", () =
       (speech) => speech.speechKind === "last_words",
     );
     expect(daySpeeches).toHaveLength(4);
-    expect(lastWords).toHaveLength(1);
-    expect(lastWords[0].speakerId).toBe("ai-1");
+    expect(lastWords).toHaveLength(0);
 
     // Four first-round votes, each carrying its voter and choice.
     expect(context.votes).toHaveLength(4);
